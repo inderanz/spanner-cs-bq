@@ -1,0 +1,64 @@
+steps:
+  # Terraform Initialization and Execution for BigQuery
+  - name: "hashicorp/terraform:light"
+    entrypoint: "/bin/sh"
+    args:
+      - "-c"
+      - |
+        echo "Processing BigQuery module for environment: ${_ENV}, instance: ${_INSTANCE}..."
+        cd envs/${_ENV}/bigquery/${_INSTANCE}
+        echo "Initializing Terraform backend for BigQuery..."
+        terraform init \
+          -backend-config="bucket=${_TF_STATE_BUCKET}" \
+          -backend-config="prefix=envs/${_ENV}/bigquery/${_INSTANCE}"
+        
+        if [ "${_ACTION}" = "plan" ]; then
+          echo "Planning Terraform changes for BigQuery..."
+          terraform plan -var-file="override.tfvars" -out=tfplan
+        elif [ "${_ACTION}" = "apply" ]; then
+          echo "Applying Terraform changes for BigQuery..."
+          terraform apply tfplan -auto-approve
+        elif [ "${_ACTION}" = "destroy" ]; then
+          echo "Destroying Terraform resources for BigQuery..."
+          terraform destroy -var-file="override.tfvars" -auto-approve
+        else
+          echo "Invalid _ACTION for BigQuery. Use 'plan', 'apply', or 'destroy'."
+          exit 1
+        fi
+
+  # Terraform Initialization and Execution for Dataflow
+  - name: "hashicorp/terraform:light"
+    entrypoint: "/bin/sh"
+    args:
+      - "-c"
+      - |
+        echo "Processing Dataflow module for environment: ${_ENV}, pipeline: ${_PIPELINE}..."
+        cd envs/${_ENV}/dataflow/${_PIPELINE}
+        ls -l  ../../../../modules/dataflow
+        echo "Initializing Terraform backend for Dataflow..."
+        terraform init \
+          -backend-config="bucket=${_TF_STATE_BUCKET}" \
+          -backend-config="prefix=envs/${_ENV}/dataflow/${_PIPELINE}"
+        
+        if [ "${_ACTION}" = "plan" ]; then
+          echo "Planning Terraform changes for Dataflow..."
+          terraform plan -var-file="override.tfvars" -out=tfplan
+        elif [ "${_ACTION}" = "apply" ]; then
+          echo "Applying Terraform changes for Dataflow..."
+          terraform apply tfplan -auto-approve
+        elif [ "${_ACTION}" = "destroy" ]; then
+          echo "Destroying Terraform resources for Dataflow..."
+          terraform destroy -var-file="override.tfvars" -auto-approve
+        else
+          echo "Invalid _ACTION for Dataflow. Use 'plan', 'apply', or 'destroy'."
+          exit 1
+        fi
+
+
+substitutions:
+  _TF_STATE_BUCKET: "terraform-spanner-bq"
+  _ENV: "dev"                  # Environment (dev, qa, production)
+  _INSTANCE: "shared-instance-1-dev"   # BigQuery instance
+  _PIPELINE: "spanner-to-bigquery"     # Dataflow pipeline
+  _ACTION: "plan"              # Terraform action (plan, apply, or destroy)
+timeout: "1200s"
