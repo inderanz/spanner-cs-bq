@@ -19,7 +19,7 @@ variable "template_gcs_path" {
 }
 
 variable "parameters" {
-  description = "Parameters for the Dataflow job."
+  description = "Parameters for the Dataflow job, including Spanner and BigQuery settings."
   type        = map(string)
 }
 
@@ -28,21 +28,9 @@ variable "service_account" {
   type        = string
 }
 
-variable "use_shared_vpc" {
-  description = "Flag to determine if shared VPC is used."
-  type        = bool
-  default     = false
-}
-
 variable "network_name" {
   description = "Network name (shared VPC or single project)."
   type        = string
-}
-
-variable "network_project_id" {
-  description = "Project ID of the shared VPC host project."
-  type        = string
-  default     = null
 }
 
 variable "subnetwork_name" {
@@ -56,37 +44,14 @@ variable "temp_bucket_name" {
 }
 
 variable "labels" {
-  description = "Labels for Dataflow resources."
+  description = "Labels to be applied to all resources."
   type        = map(string)
 }
+
 variable "iam_roles" {
-  description = "IAM roles to be assigned to the service account"
+  description = "IAM roles to be assigned to the service account."
   type        = map(bool)
   default     = {}
-}
-variable "spanner_instance_id" {
-  description = "The Spanner instance ID."
-  type        = string
-}
-
-variable "spanner_database" {
-  description = "The Spanner database name."
-  type        = string
-}
-
-variable "spanner_change_stream" {
-  description = "The Spanner change stream name."
-  type        = string
-}
-
-variable "bigquery_dataset" {
-  description = "The BigQuery dataset name."
-  type        = string
-}
-
-variable "bigquery_table_template" {
-  description = "The BigQuery table template."
-  type        = string
 }
 
 variable "additional_parameters" {
@@ -94,14 +59,14 @@ variable "additional_parameters" {
   type        = map(string)
   default     = {}
 }
+
 variable "temp_bucket_retention_days" {
   description = "Retention period (in days) for temporary bucket lifecycle."
   type        = number
   default     = 30
 }
-
-variable "template_specific_parameters" {
-  description = "Template-specific parameters for the Dataflow job."
-  type        = map(string)
-  default     = {}
+variable "network_project_id" {
+  description = "The project ID of the VPC network. Defaults to the current project if not set."
+  type        = string
+  default     = null
 }
