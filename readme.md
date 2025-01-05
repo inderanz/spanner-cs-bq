@@ -564,6 +564,15 @@ resource "google_project_iam_binding" "spanner_db_reader" {
   - Scope: Limited to the `audit_service_dataset` dataset.
   - Purpose: Allows Dataflow to write transformed data into BigQuery.
 
+gcloud iam roles create customBigQueryIngestion \
+  --project="spanner-gke-443910" \
+  --title="Custom BigQuery Data Ingestion Role" \
+  --description="Allows inserting data into BigQuery tables and creating jobs" \
+  --permissions="bigquery.tables.updateData,bigquery.jobs.create" \
+  --stage="GA"
+
+
+
 #### **Terraform Configuration**
 ```hcl
 resource "google_project_iam_binding" "dataflow_worker" {

@@ -11,13 +11,10 @@ dataset_labels = {                 # Key-value map of labels for the BigQuery da
 access_roles = [
   {
     role    = "roles/bigquery.dataEditor"
-    members = ["user:dev-user@yourdomain.com"]
-  },
-  {
-    role    = "roles/bigquery.jobUser"
-    members = ["user:dev-user@yourdomain.com"]
+    members = ["serviceAccount:dataflow-sa@spanner-gke-443910.iam.gserviceaccount.com"]
   }
 ]
+
 
 table_definitions = [              # Definitions of BigQuery tables
   {

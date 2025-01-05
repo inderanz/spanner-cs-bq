@@ -1,64 +1,77 @@
 steps:
-  # Terraform Initialization and Execution for BigQuery
   - name: "hashicorp/terraform:light"
     entrypoint: "/bin/sh"
     args:
       - "-c"
       - |
-        echo "Processing BigQuery module for environment: ${_ENV}, instance: ${_INSTANCE}..."
-        cd envs/${_ENV}/bigquery/${_INSTANCE}
-        echo "Initializing Terraform backend for BigQuery..."
-        terraform init \
-          -backend-config="bucket=${_TF_STATE_BUCKET}" \
-          -backend-config="prefix=envs/${_ENV}/bigquery/${_INSTANCE}"
-        
-        if [ "${_ACTION}" = "plan" ]; then
-          echo "Planning Terraform changes for BigQuery..."
-          terraform plan -var-file="override.tfvars" -out=tfplan
-        elif [ "${_ACTION}" = "apply" ]; then
-          echo "Applying Terraform changes for BigQuery..."
-          terraform apply tfplan -auto-approve
-        elif [ "${_ACTION}" = "destroy" ]; then
-          echo "Destroying Terraform resources for BigQuery..."
-          terraform destroy -var-file="override.tfvars" -auto-approve
+        echo "Starting Cloud Build Pipeline..."
+        echo "Pipeline: ${_PIPELINE}"
+        echo "Environment: ${_ENV}"
+        echo "Instance: ${_INSTANCE}"
+        echo "Dataflow Pipeline: ${_DATAFLOW_PIPELINE}"
+        echo "Action: ${_ACTION}"
+
+        if [ "${_PIPELINE}" = "bigquery" ]; then
+          if [ ! -d "envs/${_ENV}/bigquery/${_INSTANCE}" ]; then
+            echo "Directory envs/${_ENV}/bigquery/${_INSTANCE} does not exist!"
+            exit 1
+          fi
+
+          cd envs/${_ENV}/bigquery/${_INSTANCE}
+          terraform init -backend-config="bucket=${_TF_STATE_BUCKET}" -backend-config="prefix=envs/${_ENV}/bigquery/${_INSTANCE}"
+
+          if [ ! -f "override.tfvars" ]; then
+            echo "override.tfvars file is missing!"
+            exit 1
+          fi
+
+          if [ "${_ACTION}" = "apply" ]; then
+            terraform plan -input=false -var-file="override.tfvars" -out=tfplan
+            terraform apply -input=false -auto-approve tfplan
+          elif [ "${_ACTION}" = "destroy" ]; then
+            terraform plan -destroy -input=false -var-file="override.tfvars" -out=tfplan
+            terraform apply -input=false -auto-approve tfplan
+          else
+            echo "Invalid _ACTION value. Use 'apply' or 'destroy'."
+            exit 1
+          fi
+
+        elif [ "${_PIPELINE}" = "dataflow" ]; then
+          if [ ! -d "envs/${_ENV}/dataflow/${_DATAFLOW_PIPELINE}" ]; then
+            echo "Directory envs/${_ENV}/dataflow/${_DATAFLOW_PIPELINE} does not exist!"
+            exit 1
+          fi
+
+          cd envs/${_ENV}/dataflow/${_DATAFLOW_PIPELINE}
+          terraform init -backend-config="bucket=${_TF_STATE_BUCKET}" -backend-config="prefix=envs/${_ENV}/dataflow/${_DATAFLOW_PIPELINE}"
+
+          if [ ! -f "override.tfvars" ]; then
+            echo "override.tfvars file is missing!"
+            exit 1
+          fi
+
+          if [ "${_ACTION}" = "apply" ]; then
+            terraform plan -input=false -var-file="override.tfvars" -out=tfplan
+            terraform apply -input=false -auto-approve tfplan
+          elif [ "${_ACTION}" = "destroy" ]; then
+            terraform plan -destroy -input=false -var-file="override.tfvars" -out=tfplan
+            terraform apply -input=false -auto-approve tfplan
+          else
+            echo "Invalid _ACTION value. Use 'apply' or 'destroy'."
+            exit 1
+          fi
+
         else
-          echo "Invalid _ACTION for BigQuery. Use 'plan', 'apply', or 'destroy'."
+          echo "Invalid _PIPELINE value. Use 'bigquery' or 'dataflow'."
           exit 1
         fi
-
-  # Terraform Initialization and Execution for Dataflow
-  - name: "hashicorp/terraform:light"
-    entrypoint: "/bin/sh"
-    args:
-      - "-c"
-      - |
-        echo "Processing Dataflow module for environment: ${_ENV}, pipeline: ${_PIPELINE}..."
-        cd envs/${_ENV}/dataflow/${_PIPELINE}
-        ls -l  ../../../../modules/dataflow
-        echo "Initializing Terraform backend for Dataflow..."
-        terraform init \
-          -backend-config="bucket=${_TF_STATE_BUCKET}" \
-          -backend-config="prefix=envs/${_ENV}/dataflow/${_PIPELINE}"
-        
-        if [ "${_ACTION}" = "plan" ]; then
-          echo "Planning Terraform changes for Dataflow..."
-          terraform plan -var-file="override.tfvars" -out=tfplan
-        elif [ "${_ACTION}" = "apply" ]; then
-          echo "Applying Terraform changes for Dataflow..."
-          terraform apply tfplan -auto-approve
-        elif [ "${_ACTION}" = "destroy" ]; then
-          echo "Destroying Terraform resources for Dataflow..."
-          terraform destroy -var-file="override.tfvars" -auto-approve
-        else
-          echo "Invalid _ACTION for Dataflow. Use 'plan', 'apply', or 'destroy'."
-          exit 1
-        fi
-
 
 substitutions:
   _TF_STATE_BUCKET: "terraform-spanner-bq"
-  _ENV: "dev"                  # Environment (dev, qa, production)
-  _INSTANCE: "shared-instance-1-dev"   # BigQuery instance
-  _PIPELINE: "spanner-to-bigquery"     # Dataflow pipeline
-  _ACTION: "plan"              # Terraform action (plan, apply, or destroy)
+  _ENV: "dev"
+  _INSTANCE: "shared-instance-1-dev"
+  _PIPELINE: "dataflow"
+  _DATAFLOW_PIPELINE: "spanner-to-bigquery"
+  _ACTION: "apply"
+
 timeout: "1200s"

@@ -1,24 +1,22 @@
 # Job Configuration
 job_name           = "spanner-to-bigquery"
-template_gcs_path  = "gs://dataflow-templates/latest/Spanner_Change_Stream_to_BigQuery"
+template_gcs_path  = "gs://dataflow-templates-us-central1/2024-12-03-00_RC00/flex/Spanner_Change_Streams_to_BigQuery"
 parameters = {
-  spannerInstanceId    = "spanner-instance"
-  spannerDatabase      = "spanner-database"
-  spannerChangeStream  = "change-stream"
-  bigQueryDataset      = "dataset"
-  bigQueryTableTemplate = "table-template"
-}
-additional_parameters = {
-  additionalParam1 = "value1"
-  additionalParam2 = "value2"
+  spannerInstanceId          = "sample-instance"
+  spannerDatabase            = "audit-db"
+  spannerMetadataInstanceId  = "sample-instance"
+  spannerMetadataDatabase    = "audit-db"
+  spannerChangeStreamName    = "audit_db_change_stream"
+  bigQueryDataset            = "audit_service_dataset"
+  bigQueryChangelogTableNameTemplate = "{_metadata_spanner_table_name}_changelog"
 }
 
 # Networking Configuration
-network_name         = "default"        # Default network for standalone projects
-subnetwork_name      = "dataflow-subnet"
+network_name         = "custom-dataflow-network"        # Default network for standalone projects
+subnetwork_name      = "custom-dataflow-subnet"               # Use default subnetwork if not specified
 
 # Storage Configuration
-temp_bucket_name     = "dataflow-temp"
+temp_bucket_name     = "dataflow-temp-spanner-bq-12345" # Unique GCS bucket name
 
 # Labels
 labels = {
@@ -37,12 +35,3 @@ iam_roles = {
 project_id       = "spanner-gke-443910"
 region           = "us-central1"
 service_account  = "dataflow-sa@spanner-gke-443910.iam.gserviceaccount.com"
-
-# Spanner Configuration
-spanner_instance_id    = "spanner-instance"
-spanner_database       = "spanner-database"
-spanner_change_stream  = "change-stream"
-
-# BigQuery Configuration
-bigquery_dataset       = "dataset"
-bigquery_table_template = "table-template"

@@ -1,0 +1,129 @@
+createTime: '2025-01-05T03:37:19.529323Z'
+currentState: JOB_STATE_RUNNING
+currentStateTime: '2025-01-05T05:40:26.856540Z'
+environment:
+  userAgent:
+    container.base_repository: gcr.io/cloud-dataflow/v1beta3
+    fnapi.container.version: 2.61.0
+    fnapi.environment.major.version: '8'
+    java.vendor: Eclipse Adoptium
+    java.version: 11.0.20
+    legacy.container.version: 2.61.0
+    legacy.environment.major.version: '8'
+    name: Apache Beam SDK for Java
+    os.arch: amd64
+    os.name: Linux
+    os.version: 6.1.112+
+    version: 2.61.0
+  version:
+    job_type: FNAPI_STREAMING
+    major: '8'
+id: 2025-01-04_19_37_19-13419870172193443123
+jobMetadata:
+  sdkVersion:
+    sdkSupportStatus: SUPPORTED
+    version: 2.61.0
+    versionDisplayName: Apache Beam SDK for Java
+labels:
+  environment: dev
+  goog-dataflow-provided-template-name: spanner_change_streams_to_bigquery
+  goog-dataflow-provided-template-type: flex
+  goog-dataflow-provided-template-version: 2024-12-03-00_rc00
+  goog-terraform-provisioned: 'true'
+  pipeline: spanner-to-bigquery
+  team: data
+location: us-central1
+name: spanner-to-bigquery
+projectId: spanner-gke-443910
+runtimeUpdatableParams:
+  maxNumWorkers: 100
+  minNumWorkers: 1
+  workerUtilizationHint: 0.8
+satisfiesPzi: false
+serviceResources:
+  zones:
+  - us-central1-c
+stageStates:
+- currentStateTime: '2025-01-05T03:40:11.704Z'
+  executionStageName: F193
+  executionStageState: JOB_STATE_RUNNING
+- currentStateTime: '2025-01-05T03:40:11.704Z'
+  executionStageName: F186
+  executionStageState: JOB_STATE_RUNNING
+- currentStateTime: '2025-01-05T03:40:11.704Z'
+  executionStageName: F174
+  executionStageState: JOB_STATE_RUNNING
+- currentStateTime: '2025-01-05T03:40:11.704Z'
+  executionStageName: F181
+  executionStageState: JOB_STATE_RUNNING
+- currentStateTime: '2025-01-05T03:40:11.704Z'
+  executionStageName: F177
+  executionStageState: JOB_STATE_RUNNING
+- currentStateTime: '2025-01-05T03:40:11.704Z'
+  executionStageName: F188
+  executionStageState: JOB_STATE_RUNNING
+- currentStateTime: '2025-01-05T03:40:11.704Z'
+  executionStageName: F191
+  executionStageState: JOB_STATE_RUNNING
+- currentStateTime: '2025-01-05T03:40:11.704Z'
+  executionStageName: F182
+  executionStageState: JOB_STATE_RUNNING
+- currentStateTime: '2025-01-05T03:39:54.119Z'
+  executionStageName: Read from Spanner Change Streams/Wait.OnSignal/Wait/Map/ParMultiDo(Anonymous)/View-org.apache.beam.sdk.values.PCollectionViews$SimplePCollectionView.<init>:1931#8bf72308025c8f5f-view-out27
+  executionStageState: JOB_STATE_PENDING
+- currentStateTime: '2025-01-05T03:40:11.704Z'
+  executionStageName: F176
+  executionStageState: JOB_STATE_RUNNING
+- currentStateTime: '2025-01-05T03:40:11.704Z'
+  executionStageName: F184
+  executionStageState: JOB_STATE_RUNNING
+- currentStateTime: '2025-01-05T03:39:54.119Z'
+  executionStageName: success194
+  executionStageState: JOB_STATE_PENDING
+- currentStateTime: '2025-01-05T03:40:11.704Z'
+  executionStageName: F189
+  executionStageState: JOB_STATE_RUNNING
+- currentStateTime: '2025-01-05T03:39:54.119Z'
+  executionStageName: failure195
+  executionStageState: JOB_STATE_PENDING
+- currentStateTime: '2025-01-05T03:40:11.704Z'
+  executionStageName: F192
+  executionStageState: JOB_STATE_RUNNING
+- currentStateTime: '2025-01-05T03:39:54.119Z'
+  executionStageName: Read from Spanner Change Streams/Wait.OnSignal/Wait/Map/ParMultiDo(Anonymous)/View-org.apache.beam.sdk.values.PCollectionViews$SimplePCollectionView.<init>:1931#8bf72308025c8f5f-view26
+  executionStageState: JOB_STATE_PENDING
+- currentStateTime: '2025-01-05T03:40:11.704Z'
+  executionStageName: F173
+  executionStageState: JOB_STATE_RUNNING
+- currentStateTime: '2025-01-05T03:40:11.704Z'
+  executionStageName: F175
+  executionStageState: JOB_STATE_RUNNING
+- currentStateTime: '2025-01-05T03:40:11.704Z'
+  executionStageName: F179
+  executionStageState: JOB_STATE_RUNNING
+- currentStateTime: '2025-01-05T03:40:11.704Z'
+  executionStageName: F183
+  executionStageState: JOB_STATE_RUNNING
+- currentStateTime: '2025-01-05T03:40:11.704Z'
+  executionStageName: F178
+  executionStageState: JOB_STATE_RUNNING
+- currentStateTime: '2025-01-05T03:40:11.704Z'
+  executionStageName: F187
+  executionStageState: JOB_STATE_RUNNING
+- currentStateTime: '2025-01-05T03:39:54.119Z'
+  executionStageName: start196
+  executionStageState: JOB_STATE_PENDING
+- currentStateTime: '2025-01-05T03:40:11.704Z'
+  executionStageName: F180
+  executionStageState: JOB_STATE_RUNNING
+- currentStateTime: '2025-01-05T03:40:11.704Z'
+  executionStageName: F185
+  executionStageState: JOB_STATE_RUNNING
+- currentStateTime: '2025-01-05T03:40:11.704Z'
+  executionStageName: F190
+  executionStageState: JOB_STATE_RUNNING
+- currentStateTime: '2025-01-05T03:39:54.119Z'
+  executionStageName: Read from Spanner Change Streams/Wait.OnSignal/Wait/Map/ParMultiDo(Anonymous)/View-org.apache.beam.sdk.values.PCollectionViews$SimplePCollectionView.<init>:1931#8bf72308025c8f5f-view-writer-out25
+  executionStageState: JOB_STATE_PENDING
+startTime: '2025-01-05T03:37:19.529323Z'
+type: JOB_TYPE_STREAMING

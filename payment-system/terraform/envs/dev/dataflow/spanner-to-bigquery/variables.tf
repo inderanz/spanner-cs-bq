@@ -18,6 +18,10 @@ variable "template_gcs_path" {
   type        = string
 }
 
+variable "parameters" {
+  description = "Parameters for the Dataflow job, including Spanner and BigQuery settings."
+  type        = map(string)
+}
 
 variable "network_name" {
   description = "The name of the VPC network."
@@ -49,43 +53,19 @@ variable "service_account" {
   type        = string
 }
 
-variable "parameters" {
-  description = "Parameters for the Dataflow job."
-  type        = map(string)
-}
-
 variable "additional_parameters" {
   description = "Additional parameters for the Dataflow job."
   type        = map(string)
   default     = {}
-}
-variable "spanner_instance_id" {
-  description = "The Spanner instance ID."
-  type        = string
-}
-
-variable "spanner_database" {
-  description = "The Spanner database name."
-  type        = string
-}
-
-variable "spanner_change_stream" {
-  description = "The Spanner change stream name."
-  type        = string
-}
-
-variable "bigquery_dataset" {
-  description = "The BigQuery dataset name."
-  type        = string
-}
-
-variable "bigquery_table_template" {
-  description = "The BigQuery table template."
-  type        = string
 }
 
 variable "temp_bucket_retention_days" {
   description = "Retention period (in days) for temporary bucket lifecycle."
   type        = number
   default     = 30
+}
+variable "network_project_id" {
+  description = "The project ID of the VPC network. Defaults to the current project if not set."
+  type        = string
+  default     = null
 }
