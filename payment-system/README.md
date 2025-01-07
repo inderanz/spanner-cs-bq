@@ -1126,32 +1126,6 @@ Verify Data in BigQuery
 +---------+--------+---------------------+---------+-------------+-----------------+------------+--------------+
 
 
-Test Cases
-
-1) Manually Insert Data into the Table Monitored by ChangeStream & Ensure Data Reflection in BigQuery via Dataflow
-Insert Data into Spanner Table
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 **Use-Cases**
@@ -1998,9 +1972,6 @@ Spanner - Inserted record: 'PUID': 'f0c7b098-6d9f-4e02-8877-1b853fe8c086'
 
 ```
 
-[2025-01-07T02:39:44.007100+00:00] Logged to BigQuery: Spanner - Inserted record: {'PUID': 'f0c7b098-6d9f-4e02-8877-1b853fe8c086', 'Action': 'CREATE_PAYMENT', 'Status': 'SUCCESS', 'Timestamp': datetime.datetime(2025, 1, 7, 2, 39, 41, 790220, tzinfo=datetime.timezone.utc), 'ServiceName': 'PaymentService', 'Metadata': '{"amount": 100.50, "currency": "USD"}', 'RetryCount': 0, 'ErrorDetails': None}
-Inserted record into Spanner: {'PUID': 'f0c7b098-6d9f-4e02-8877-1b853fe8c086', 'Action': 'CREATE_PAYMENT', 'Status': 'SUCCESS', 'Timestamp': datetime.datetime(2025, 1, 7, 2, 39, 41, 790220, tzinfo=datetime.timezone.utc), 'ServiceName': 'PaymentService', 'Metadata': '{"amount": 100.50, "currency": "USD"}', 'RetryCount': 0, 'ErrorDetails': None}
-[2025-01-07T02:39:50.124079+00:00] Logged to BigQuery: BigQuery - New row: {'PUID': 'f0c7b098-6d9f-4e02-8877-1b853fe8c086', 'Action': 'CREATE_PAYMENT', 'Timestamp': datetime.datetime(2025, 1, 7, 2, 39, 41, 790220, tzinfo=datetime.timezone.utc), 'Status': 'SUCCESS', 'ServiceName': 'PaymentService', 'Metadata': {'amount': 100.5, 'currency': 'USD'}, 'RetryCount': 0, 'ErrorDetails': None, '_metadata_spanner_mod_type': 'INSERT', '_metadata_spanner_table_name': 'payment_audit_trail', '_metadata_spanner_commit_timestamp': datetime.datetime(2025, 1, 7, 2, 39, 43, 676607, tzinfo=datetime.timezone.utc), '_metadata_spanner_server_transaction_id': 'Mzk4ODY2Mzg4NjA1NDY3OTk2NA==', '_metadata_spanner_record_sequence': '00000000', '_metadata_spanner_is_last_record_in_transaction_in_partition': True, '_metadata_spanner_number_of_records_in_transaction': 1, '_metadata_spanner_number_of_partitions_in_transaction': 1, '_metadata_big_query_commit_timestamp': datetime.datetime(2025, 1, 7, 2, 39, 48, 242122, tzinfo=datetime.timezone.utc)}
 
 ```
 
