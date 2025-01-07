@@ -1,14 +1,14 @@
 # Job Configuration
-job_name           = "spanner-to-bigquery"
+job_name           = "spanner-to-bigquery-qa"
 template_gcs_path  = "gs://dataflow-templates-us-central1/2024-12-03-00_RC00/flex/Spanner_Change_Streams_to_BigQuery"
 parameters = {
   spannerInstanceId          = "sample-instance"
   spannerDatabase            = "audit-db"
   spannerMetadataInstanceId  = "sample-instance"
   spannerMetadataDatabase    = "audit-db"
-  spannerChangeStreamName    = "audit_db_change_stream"
+  spannerChangeStreamName    = "audit_db_change_stream_v2"
   bigQueryDataset            = "audit_service_dataset"
-  bigQueryChangelogTableNameTemplate = "{_metadata_spanner_table_name}_changelog"
+  bigQueryChangelogTableNameTemplate = "payment_audit_trail_changelog"
 }
 
 # Networking Configuration
@@ -20,9 +20,9 @@ temp_bucket_name     = "dataflow-temp-spanner-bq-qa"
 
 # Labels
 labels = {
-  environment = "dev"
-  team        = "data"
-  pipeline    = "spanner-to-bigquery"
+  environment = "qa"
+  team        = "data-qa"
+  pipeline    = "spanner-to-bigquery-qa"
 }
 
 # IAM Configuration
