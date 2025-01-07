@@ -2168,49 +2168,50 @@ ai-learningharshvardhan@harshvadhansAir terraform % bq query --nouse_legacy_sql 
 
 Usecase 3:
 
-Add a new column in existing DB see the changes.
 
-Output:
+## Add a New Column in Existing DB and Observe Changes
 
-Before secnerio :
+### Output:
 
+#### Before Scenario:
 
+```bash
 % bq query --nouse_legacy_sql \
-"SELECT COUNT(*) AS total_rows FROM \`spanner-gke-443910.audit_service_dataset.payment_audit_trail_changelog\`"
+"SELECT COUNT(*) AS total_rows FROM `spanner-gke-443910.audit_service_dataset.payment_audit_trail_changelog`"
+
 +------------+
 | total_rows |
 +------------+
 |          0 |
 +------------+
 
-
 % gcloud spanner databases execute-sql audit-db \
     --instance=sample-instance \
     --project=spanner-gke-443910 \
     --sql="SELECT COUNT(*) AS total_rows FROM payment_audit_trail"
+
 total_rows
 0
 
+Table Schema Before Adding Columns:
+Table Name	Column Name	Type	Nullable
+payment_audit_trail_psp	PUID	STRING(36)	NO
+payment_audit_trail_psp	Action	STRING(100)	NO
+payment_audit_trail_psp	Status	STRING(50)	YES
+payment_audit_trail_psp	Timestamp	TIMESTAMP	NO
+payment_audit_trail_psp	ServiceName	STRING(100)	YES
+payment_audit_trail_psp	Metadata	JSON	YES
+payment_audit_trail_psp	RetryCount	INT64	YES
+payment_audit_trail_psp	ErrorDetails	STRING(500)	YES
 
-BEFORE:
-
-payment_audit_trail_psp                                 PUID             STRING(36)          NO
-payment_audit_trail_psp                                 Action           STRING(100)         NO
-payment_audit_trail_psp                                 Status           STRING(50)          YES
-payment_audit_trail_psp                                 Timestamp        TIMESTAMP           NO
-payment_audit_trail_psp                                 ServiceName      STRING(100)         YES
-payment_audit_trail_psp                                 Metadata         JSON                YES
-payment_audit_trail_psp                                 RetryCount       INT64               YES
-payment_audit_trail_psp                                 ErrorDetails     STRING(500)         YES
-
-
-AFTER:
+Table Schema After Adding Columns:
 
 % gcloud spanner databases execute-sql audit-db \
     --instance=sample-instance \
     --project=spanner-gke-443910 \
     --sql="SELECT column_name FROM information_schema.columns WHERE table_name = 'payment_audit_trail_psp';"
 
+Output
 column_name
 PUID
 Action
@@ -2225,154 +2226,59 @@ Source
 TransactionId
 Processed
 
-% gcloud spanner databases execute-sql audit-db \
-    --instance=sample-instance \
-    --project=spanner-gke-443910 \
-    --sql="
-        SELECT
-            t.table_name,
-            c.column_name,
-            c.spanner_type,
-            c.is_nullable
-        FROM
-            information_schema.tables AS t
-        JOIN
-            information_schema.columns AS c
-        ON
-            t.table_name = c.table_name
-        WHERE
-            t.table_schema = ''
-        ORDER BY
-            t.table_name, c.ordinal_position;" |grep payment_audit_trail_psp
-payment_audit_trail_psp                                 PUID             STRING(36)          NO
-payment_audit_trail_psp                                 Action           STRING(100)         NO
-payment_audit_trail_psp                                 Status           STRING(50)          YES
-payment_audit_trail_psp                                 Timestamp        TIMESTAMP           NO
-payment_audit_trail_psp                                 ServiceName      STRING(100)         YES
-payment_audit_trail_psp                                 Metadata         JSON                YES
-payment_audit_trail_psp                                 RetryCount       INT64               YES
-payment_audit_trail_psp                                 ErrorDetails     STRING(500)         YES
-payment_audit_trail_psp                                 UserId           STRING(100)         YES
-payment_audit_trail_psp                                 Source           STRING(100)         YES
-payment_audit_trail_psp                                 TransactionId    STRING(100)         YES
-payment_audit_trail_psp                                 Processed        BOOL                YES
+
+Complete Schema After Adding Columns:
+Table Name	Column Name	Type	Nullable
+payment_audit_trail_psp	PUID	STRING(36)	NO
+payment_audit_trail_psp	Action	STRING(100)	NO
+payment_audit_trail_psp	Status	STRING(50)	YES
+payment_audit_trail_psp	Timestamp	TIMESTAMP	NO
+payment_audit_trail_psp	ServiceName	STRING(100)	YES
+payment_audit_trail_psp	Metadata	JSON	YES
+payment_audit_trail_psp	RetryCount	INT64	YES
+payment_audit_trail_psp	ErrorDetails	STRING(500)	YES
+payment_audit_trail_psp	UserId	STRING(100)	YES
+payment_audit_trail_psp	Source	STRING(100)	YES
+payment_audit_trail_psp	TransactionId	STRING(100)	YES
+payment_audit_trail_psp	Processed	BOOL	YES
 
 
-######
+Destination BigQuery:
 
-But in  Destination BQ:
+% bq show spanner-gke-443910:audit_service_dataset.payment_audit_trail_changelog
 
- % bq show spanner-gke-443910:audit_service_dataset.payment_audit_trail_changelog
 Table spanner-gke-443910:audit_service_dataset.payment_audit_trail_changelog
 
-   Last modified                                     Schema                                    Total Rows   Total Bytes   Expiration   Time Partitioning   Clustered Fields   Total Logical Bytes   Total Physical Bytes   Labels  
- ----------------- -------------------------------------------------------------------------- ------------ ------------- ------------ ------------------- ------------------ --------------------- ---------------------- -------- 
-  07 Jan 18:14:41   |- PUID: string                                                            0            0                                                                 0                     985                            
-                    |- Action: string                                                                                                                                                                                              
-                    |- Timestamp: timestamp                                                                                                                                                                                        
-                    |- Status: string                                                                                                                                                                                              
-                    |- ServiceName: string                                                                                                                                                                                         
-                    |- Metadata: json                                                                                                                                                                                              
-                    |- RetryCount: integer                                                                                                                                                                                         
-                    |- ErrorDetails: string                                                                                                                                                                                        
-                    |- _metadata_spanner_mod_type: string                                                                                                                                                                          
-                    |- _metadata_spanner_table_name: string                                                                                                                                                                        
-                    |- _metadata_spanner_commit_timestamp: timestamp                                                                                                                                                               
-                    |- _metadata_spanner_server_transaction_id: string                                                                                                                                                             
-                    |- _metadata_spanner_record_sequence: string                                                                                                                                                                   
-                    |- _metadata_spanner_is_last_record_in_transaction_in_partition: boolean                                                                                                                                       
-                    |- _metadata_spanner_number_of_records_in_transaction: integer                                                                                                                                                 
-                    |- _metadata_spanner_number_of_partitions_in_transaction: integer                                                                                                                                              
-                    |- _metadata_big_query_commit_timestamp: timestamp    
+   Last modified                                     Schema                                    Total Rows   Total Bytes   
+ ----------------- -------------------------------------------------------------------------- ------------ ------------- 
+  07 Jan 18:14:41   |- PUID: string                                                            0            0           
+                    |- Action: string                                                                                  
+                    |- Timestamp: timestamp                                                                            
+                    |- Status: string                                                                                  
+                    |- ServiceName: string                                                                             
+                    |- Metadata: json                                                                                  
+                    |- RetryCount: integer                                                                             
+                    |- ErrorDetails: string                                                                            
+                    |- _metadata_spanner_mod_type: string                                                              
+                    |- _metadata_spanner_table_name: string                                                            
+                    |- _metadata_spanner_commit_timestamp: timestamp                                                   
+                    |- _metadata_spanner_server_transaction_id: string                                                 
+                    |- _metadata_spanner_record_sequence: string                                                       
+                    |- _metadata_spanner_is_last_record_in_transaction_in_partition: boolean                           
+                    |- _metadata_spanner_number_of_records_in_transaction: integer                                     
+                    |- _metadata_spanner_number_of_partitions_in_transaction: integer                                  
+                    |- _metadata_big_query_commit_timestamp: timestamp                                                 
 
 
+Error Observed in Dataflow Job:
 
-  
-2025-01-07 17:38:48.687 AEDT
-Error message from worker: generic::unknown: org.apache.beam.sdk.util.UserCodeException: java.lang.RuntimeException: com.google.api.client.googleapis.json.GoogleJsonResponseException: 404 Not Found
-POST https://bigquery.googleapis.com/bigquery/v2/projects/spanner-gke-443910/datasets/audit_service_dataset/tables/payment_audit_trail_changelog/insertAll?prettyPrint=false
+
 {
   "code": 404,
-  "errors": [
-    {
-      "domain": "global",
-      "message": "Not found: Table spanner-gke-443910:audit_service_dataset.payment_audit_trail_changelog",
-      "reason": "notFound"
-    }
-  ],
   "message": "Not found: Table spanner-gke-443910:audit_service_dataset.payment_audit_trail_changelog",
   "status": "NOT_FOUND"
 }
-	org.apache.beam.sdk.util.UserCodeException.wrap(UserCodeException.java:39)
-	org.apache.beam.sdk.io.gcp.bigquery.BatchedStreamingWrite$BatchAndInsertElements$DoFnInvoker.invokeFinishBundle(Unknown Source)
-	org.apache.beam.fn.harness.FnApiDoFnRunner.finishBundle(FnApiDoFnRunner.java:1821)
-	org.apache.beam.fn.harness.data.PTransformFunctionRegistry.lambda$register$0(PTransformFunctionRegistry.java:116)
-	org.apache.beam.fn.harness.control.ProcessBundleHandler.processBundle(ProcessBundleHandler.java:560)
-	org.apache.beam.fn.harness.control.BeamFnControlClient.delegateOnInstructionRequestType(BeamFnControlClient.java:150)
-	org.apache.beam.fn.harness.control.BeamFnControlClient$InboundObserver.lambda$onNext$0(BeamFnControlClient.java:115)
-	java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:515)
-	java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
-	org.apache.beam.sdk.util.UnboundedScheduledExecutorService$ScheduledFutureTask.run(UnboundedScheduledExecutorService.java:163)
-	java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128)
-	java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628)
-	java.base/java.lang.Thread.run(Thread.java:829)
-Caused by: java.lang.RuntimeException: com.google.api.client.googleapis.json.GoogleJsonResponseException: 404 Not Found
-POST https://bigquery.googleapis.com/bigquery/v2/projects/spanner-gke-443910/datasets/audit_service_dataset/tables/payment_audit_trail_changelog/insertAll?prettyPrint=false
-{
-  "code": 404,
-  "errors": [
-    {
-      "domain": "global",
-      "message": "Not found: Table spanner-gke-443910:audit_service_dataset.payment_audit_trail_changelog",
-      "reason": "notFound"
-    }
-  ],
-  "message": "Not found: Table spanner-gke-443910:audit_service_dataset.payment_audit_trail_changelog",
-  "status": "NOT_FOUND"
-}
-	org.apache.beam.sdk.io.gcp.bigquery.BigQueryServicesImpl$DatasetServiceImpl.insertAll(BigQueryServicesImpl.java:1259)
-	org.apache.beam.sdk.io.gcp.bigquery.BigQueryServicesImpl$DatasetServiceImpl.insertAll(BigQueryServicesImpl.java:1322)
-	org.apache.beam.sdk.io.gcp.bigquery.BatchedStreamingWrite.flushRows(BatchedStreamingWrite.java:403)
-	org.apache.beam.sdk.io.gcp.bigquery.BatchedStreamingWrite.access$900(BatchedStreamingWrite.java:67)
-	org.apache.beam.sdk.io.gcp.bigquery.BatchedStreamingWrite$BatchAndInsertElements.finishBundle(BatchedStreamingWrite.java:286)
-Caused by: com.google.api.client.googleapis.json.GoogleJsonResponseException: 404 Not Found
-POST https://bigquery.googleapis.com/bigquery/v2/projects/spanner-gke-443910/datasets/audit_service_dataset/tables/payment_audit_trail_changelog/insertAll?prettyPrint=false
-{
-  "code": 404,
-  "errors": [
-    {
-      "domain": "global",
-      "message": "Not found: Table spanner-gke-443910:audit_service_dataset.payment_audit_trail_changelog",
-      "reason": "notFound"
-    }
-  ],
-  "message": "Not found: Table spanner-gke-443910:audit_service_dataset.payment_audit_trail_changelog",
-  "status": "NOT_FOUND"
-}
-	com.google.api.client.googleapis.json.GoogleJsonResponseException.from(GoogleJsonResponseException.java:146)
-	com.google.api.client.googleapis.services.json.AbstractGoogleJsonClientRequest.newExceptionOnError(AbstractGoogleJsonClientRequest.java:118)
-	com.google.api.client.googleapis.services.json.AbstractGoogleJsonClientRequest.newExceptionOnError(AbstractGoogleJsonClientRequest.java:37)
-	com.google.api.client.googleapis.services.AbstractGoogleClientRequest$3.interceptResponse(AbstractGoogleClientRequest.java:479)
-	com.google.api.client.http.HttpRequest.execute(HttpRequest.java:1111)
-	com.google.api.client.googleapis.services.AbstractGoogleClientRequest.executeUnparsed(AbstractGoogleClientRequest.java:565)
-	com.google.api.client.googleapis.services.AbstractGoogleClientRequest.executeUnparsed(AbstractGoogleClientRequest.java:506)
-	com.google.api.client.googleapis.services.AbstractGoogleClientRequest.execute(AbstractGoogleClientRequest.java:616)
-	org.apache.beam.sdk.io.gcp.bigquery.BigQueryServicesImpl$DatasetServiceImpl$InsertBatchofRowsCallable.call(BigQueryServicesImpl.java:1004)
-	org.apache.beam.sdk.io.gcp.bigquery.BigQueryServicesImpl$DatasetServiceImpl$InsertBatchofRowsCallable.call(BigQueryServicesImpl.java:950)
-	org.apache.beam.vendor.guava.v32_1_2_jre.com.google.common.util.concurrent.TrustedListenableFutureTask$TrustedFutureInterruptibleTask.runInterruptibly(TrustedListenableFutureTask.java:131)
-	org.apache.beam.vendor.guava.v32_1_2_jre.com.google.common.util.concurrent.InterruptibleTask.run(InterruptibleTask.java:75)
-	org.apache.beam.vendor.guava.v32_1_2_jre.com.google.common.util.concurrent.TrustedListenableFutureTask.run(TrustedListenableFutureTask.java:82)
-	java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:515)
-	java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
-	org.apache.beam.sdk.util.UnboundedScheduledExecutorService$ScheduledFutureTask.run(UnboundedScheduledExecutorService.java:163)
-	java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128)
-	java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628)
-	java.base/java.lang.Thread.run(Thread.java:829)
 
-
-###
-
-Error in other Job as well, which is focused for Table - without psp
 
 2025-01-07 14:58:02.364 AEDT
 Error message from worker: generic::unknown: org.apache.beam.sdk.util.UserCodeException: java.lang.RuntimeException: com.google.api.client.googleapis.json.GoogleJsonResponseException: 404 Not Found
@@ -2385,117 +2291,40 @@ POST https://bigquery.googleapis.com/bigquery/v2/projects/spanner-gke-443910/dat
       "message": "Table is truncated.",
       "reason": "notFound"
     }
-  ],
-  "message": "Table is truncated.",
-  "status": "NOT_FOUND"
-}
-	org.apache.beam.sdk.util.UserCodeException.wrap(UserCodeException.java:39)
-	org.apache.beam.sdk.io.gcp.bigquery.BatchedStreamingWrite$BatchAndInsertElements$DoFnInvoker.invokeFinishBundle(Unknown Source)
-	org.apache.beam.fn.harness.FnApiDoFnRunner.finishBundle(FnApiDoFnRunner.java:1821)
-	org.apache.beam.fn.harness.data.PTransformFunctionRegistry.lambda$register$0(PTransformFunctionRegistry.java:116)
-	org.apache.beam.fn.harness.control.ProcessBundleHandler.processBundle(ProcessBundleHandler.java:560)
-	org.apache.beam.fn.harness.control.BeamFnControlClient.delegateOnInstructionRequestType(BeamFnControlClient.java:150)
-	org.apache.beam.fn.harness.control.BeamFnControlClient$InboundObserver.lambda$onNext$0(BeamFnControlClient.java:115)
-	java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:515)
-	java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
-	org.apache.beam.sdk.util.UnboundedScheduledExecutorService$ScheduledFutureTask.run(UnboundedScheduledExecutorService.java:163)
-	java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128)
-	java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628)
-	java.base/java.lang.Thread.run(Thread.java:829)
-Caused by: java.lang.RuntimeException: com.google.api.client.googleapis.json.GoogleJsonResponseException: 404 Not Found
-POST https://bigquery.googleapis.com/bigquery/v2/projects/spanner-gke-443910/datasets/audit_service_dataset/tables/payment_audit_trail_changelog/insertAll?prettyPrint=false
-{
-  "code": 404,
-  "errors": [
-    {
-      "domain": "global",
-      "message": "Table is truncated.",
-      "reason": "notFound"
-    }
-  ],
-  "message": "Table is truncated.",
-  "status": "NOT_FOUND"
-}
-	org.apache.beam.sdk.io.gcp.bigquery.BigQueryServicesImpl$DatasetServiceImpl.insertAll(BigQueryServicesImpl.java:1259)
-	org.apache.beam.sdk.io.gcp.bigquery.BigQueryServicesImpl$DatasetServiceImpl.insertAll(BigQueryServicesImpl.java:1322)
-	org.apache.beam.sdk.io.gcp.bigquery.BatchedStreamingWrite.flushRows(BatchedStreamingWrite.java:403)
-	org.apache.beam.sdk.io.gcp.bigquery.BatchedStreamingWrite.access$900(BatchedStreamingWrite.java:67)
-	org.apache.beam.sdk.io.gcp.bigquery.BatchedStreamingWrite$BatchAndInsertElements.finishBundle(BatchedStreamingWrite.java:286)
-Caused by: com.google.api.client.googleapis.json.GoogleJsonResponseException: 404 Not Found
-POST https://bigquery.googleapis.com/bigquery/v2/projects/spanner-gke-443910/datasets/audit_service_dataset/tables/payment_audit_trail_changelog/insertAll?prettyPrint=false
-{
-  "code": 404,
-  "errors": [
-    {
-      "domain": "global",
-      "message": "Table is truncated.",
-      "reason": "notFound"
-    }
-  ],
-  "message": "Table is truncated.",
-  "status": "NOT_FOUND"
-}
-	com.google.api.client.googleapis.json.GoogleJsonResponseException.from(GoogleJsonResponseException.java:146)
-	com.google.api.client.googleapis.services.json.AbstractGoogleJsonClientRequest.newExceptionOnError(AbstractGoogleJsonClientRequest.java:118)
-	com.google.api.client.googleapis.services.json.AbstractGoogleJsonClientRequest.newExceptionOnError(AbstractGoogleJsonClientRequest.java:37)
-	com.google.api.client.googleapis.services.AbstractGoogleClientRequest$3.interceptResponse(AbstractGoogleClientRequest.java:479)
-	com.google.api.client.http.HttpRequest.execute(HttpRequest.java:1111)
-	com.google.api.client.googleapis.services.AbstractGoogleClientRequest.executeUnparsed(AbstractGoogleClientRequest.java:565)
-	com.google.api.client.googleapis.services.AbstractGoogleClientRequest.executeUnparsed(AbstractGoogleClientRequest.java:506)
-	com.google.api.client.googleapis.services.AbstractGoogleClientRequest.execute(AbstractGoogleClientRequest.java:616)
-	org.apache.beam.sdk.io.gcp.bigquery.BigQueryServicesImpl$DatasetServiceImpl$InsertBatchofRowsCallable.call(BigQueryServicesImpl.java:1004)
-	org.apache.beam.sdk.io.gcp.bigquery.BigQueryServicesImpl$DatasetServiceImpl$InsertBatchofRowsCallable.call(BigQueryServicesImpl.java:950)
-	org.apache.beam.vendor.guava.v32_1_2_jre.com.google.common.util.concurrent.TrustedListenableFutureTask$TrustedFutureInterruptibleTask.runInterruptibly(TrustedListenableFutureTask.java:131)
-	org.apache.beam.vendor.guava.v32_1_2_jre.com.google.common.util.concurrent.InterruptibleTask.run(InterruptibleTask.java:75)
-	org.apache.beam.vendor.guava.v32_1_2_jre.com.google.common.util.concurrent.TrustedListenableFutureTask.run(TrustedListenableFutureTask.java:82)
-	java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:515)
-	java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
-	org.apache.beam.sdk.util.UnboundedScheduledExecutorService$ScheduledFutureTask.run(UnboundedScheduledExecutorService.java:163)
-	java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128)
-	java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628)
-	java.base/java.lang.Thread.run(Thread.java:829)
 
-passed through:
-==>
-    dist_proc/dax/workflow/worker/fnapi_service_impl.cc:1292
-{
-httpRequest: null
-insertId: "1ioy091bct"
-jsonPayload: null
-labels: {4}
-logName: "projects/spanner-gke-443910/logs/dataflow.g
-
-
-
-################################
-################################
-
-UPDATED THE BQ With new columns
+Resolution:
 
 % bq update --schema 'PUID:STRING,Action:STRING,Status:STRING,Timestamp:TIMESTAMP,ServiceName:STRING,Metadata:JSON,RetryCount:INTEGER,ErrorDetails:STRING,_metadata_spanner_mod_type:STRING,_metadata_spanner_table_name:STRING,_metadata_spanner_commit_timestamp:TIMESTAMP,_metadata_spanner_server_transaction_id:STRING,_metadata_spanner_record_sequence:STRING,_metadata_spanner_is_last_record_in_transaction_in_partition:BOOLEAN,_metadata_spanner_number_of_records_in_transaction:INTEGER,_metadata_spanner_number_of_partitions_in_transaction:INTEGER,_metadata_big_query_commit_timestamp:TIMESTAMP,UserId:STRING,Source:STRING,TransactionId:STRING,Processed:BOOLEAN' spanner-gke-443910:audit_service_dataset.payment_audit_trail_changelog
+
+
+Output
 
 Table 'spanner-gke-443910:audit_service_dataset.payment_audit_trail_changelog' successfully updated.
 
 
-####
+Post-Resolution Verification:
 
-After this change
-
-% bq query --nouse_legacy_sql \                  
-"SELECT COUNT(*) AS total_rows FROM \`spanner-gke-443910.audit_service_dataset.payment_audit_trail_changelog\`"
 +------------+
 | total_rows |
 +------------+
 |         98 |
 +------------+
-ai-learningharshvardhan@harshvadhansAir terraform % gcloud spanner databases execute-sql audit-db \
-    --instance=sample-instance \                                                                               
+
+
+% gcloud spanner databases execute-sql audit-db \
+    --instance=sample-instance \
     --project=spanner-gke-443910 \
     --sql="SELECT COUNT(*) AS total_rows FROM payment_audit_trail_psp"
+
+Output
+
 total_rows
 115
 
+Observation, few of entries missed during this on-fly changes & this is can be handled properly.
 
-######
+
+
+
 
 
