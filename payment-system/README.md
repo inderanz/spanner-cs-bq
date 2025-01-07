@@ -1,132 +1,231 @@
 
-If this is a production setup, you might need to revisit the design of your changelog and how it integrates with BigQuery:
+# Dataflow Job Overview - Spanner to BigQuery Pipeline
 
-Use partitioned tables with TTL to automatically clear old records.
-Regularly archive or delete old data using scheduled querie
+This document provides an overview of the Spanner-to-BigQuery Dataflow pipeline, detailing the dataset configuration, schema, Dataflow job details, and troubleshooting steps for issues in the pipeline.
 
-Dataset Details
+## Dataset Details
 
-Dataset ID: audit_service_dataset
-Project ID: spanner-gke-443910
-Labels:
-environment: dev
-team: service-support-squad
-Location: us-central1
-IAM Access Roles:
-WRITER for dataflow-sa@spanner-gke-443910.iam.gserviceaccount.com
+- **Dataset ID**: `audit_service_dataset`
+- **Project ID**: `spanner-gke-443910`
+- **Location**: `us-central1`
+- **Labels**:
+  - `environment`: `dev`
+  - `team`: `service-support-squad`
+  
+### IAM Access Roles
+- **WRITER**: `dataflow-sa@spanner-gke-443910.iam.gserviceaccount.com`
+- **OWNER**: `cloudbuild-cicd@spanner-gke-443910.iam.gserviceaccount.com`
 
-OWNER for cloudbuild-cicd@spanner-gke-443910.iam.gserviceaccount.com
+These roles ensure that Dataflow and Cloud Build have the necessary permissions to interact with the dataset.
 
-These access roles align with the intended use case, ensuring that Dataflow and Cloud Build have the necessary permissions.
+## Tables
 
-Tables
+### `audit_logs` Table Schema
 
-Table ID: audit_logs
-Schema:
-PUID: string (required)
+| Column Name   | Type          | Required |
+| ------------- | ------------- | -------- |
+| `PUID`        | STRING        | Yes      |
+| `Action`      | STRING        | Yes      |
+| `Timestamp`   | TIMESTAMP     | Yes      |
+| `Status`      | STRING        | No       |
+| `ServiceName` | STRING        | No       |
+| `Metadata`    | JSON          | No       |
+| `RetryCount`  | INT64         | No       |
+| `ErrorDetails`| STRING        | No       |
 
-Action: string (required)
+### Spanner Change Stream Setup
 
-Timestamp: timestamp (required)
+- **Change Stream Name**: `audit_db_change_stream`
+- **Associated Table**: `payment_audit_trail`
+- **Change Stream Configuration**: 
+  - Tracks specific columns and operations (INSERT, UPDATE, DELETE)
+  - Not all columns are tracked (ALL = False)
 
-Other fields (optional): Status, ServiceName, Metadata, RetryCount, ErrorDetails
+## Dataflow Pipeline Details
 
-The schema matches the expected structure for the audit_logs table.
+### Dataflow Jobs
 
+- **Job Name**: `spanner-to-bigquery`
+- **Job Type**: `Streaming`
+- **Region**: `us-central1`
+- **State**: `Running`
+- **Created**: `2025-01-05 00:51:47`
+- **Pipeline**: `spanner-to-bigquery`
+- **Dataflow Template Version**: `2024-10-01-00_rc00`
+  
+#### Job Logs and State
 
-###
+- The Dataflow job is currently in a `RUNNING` state.
+- Logs indicate errors related to partition issues: "Initial partition not found in metadata table."
 
- % gcloud spanner databases execute-sql audit-db \
-    --instance=sample-instance \
-    --project=spanner-gke-443910 \
-    --sql="SELECT table_name FROM information_schema.tables WHERE table_schema = '';"
+### Dataflow Logs Streaming
 
-table_name
-Metadata_audit_db_4e6d5eb7_55ac_4b6e_8c0f_0210cd719005
-Metadata_audit_db_9c537520_850b_4374_9630_33735f3d839a
-payment_audit_trail
-PaymentAuditTrail
-harshvardhan@harshvadhansAir gcp-npp % gcloud spanner databases execute-sql audit-db \
-    --instance=sample-instance \
-    --project=spanner-gke-443910 \
-    --sql="SELECT change_stream_name FROM information_schema.change_streams;"
+To stream the logs of the Dataflow job:
 
-change_stream_name
-audit_db_change_stream
-
-% gcloud spanner databases execute-sql audit-db \
-    --instance=sample-instance \
-    --project=spanner-gke-443910 \
-    --sql="SELECT * FROM information_schema.change_streams;"
-
-CHANGE_STREAM_CATALOG  CHANGE_STREAM_SCHEMA  CHANGE_STREAM_NAME      ALL
-                                             audit_db_change_stream  False
-
-
-
- Verify Change Stream Target Table: Check if the change stream is associated with the correct table(s):
-
-       % gcloud spanner databases execute-sql audit-db \
-    --instance=sample-instance \
-    --project=spanner-gke-443910 \
-    --sql="SELECT table_name FROM information_schema.change_stream_tables WHERE change_stream_name = 'audit_db_change_stream';"
-
-table_name
-payment_audit_trail
+```bash
+gcloud logging read "resource.type=dataflow_step AND resource.labels.job_id=2025-01-04_16_51_47-15423036885126082476" \
+  --project=spanner-gke-443910 \
+  --format="table(timestamp, textPayload)" --limit=50
 
 
-Inspect Change Stream Metadata Table: Check if the metadata for audit_db_change_stream is correctly initialized:
 
-% gcloud spanner databases execute-sql audit-db \
-    --instance=sample-instance \
-    --project=spanner-gke-443910 \
-    --sql="SELECT * FROM Metadata_audit_db_3017dd79_c6d9_4e2e_ad54_16dfd49398d6;"
+Error Logs (Partition Issue)
+To fetch only error logs:
 
-PartitionToken                                                                                                                                        ParentTokens                                                                                                                                              StartTimestamp               EndTimestamp                    HeartbeatMillis  State     Watermark                 CreatedAt                    ScheduledAt                  RunningAt                    FinishedAt
-Parent0                                                                                                                                               []                                                                                                                                                        2025-01-04T14:58:14.046Z     9999-12-31T23:59:59.999999998Z  2000             FINISHED  2025-01-04T14:58:14.046Z  2025-01-04T15:01:27.858079Z  2025-01-04T15:01:28.705699Z  2025-01-04T15:01:28.733404Z  2025-01-04T15:01:29.569276Z
-__8BAYEHAc4hvZAAAYLAUoNhdWRpdF9kYl9jaGFuZ2Vfc3RyZWFtAAGEgQCCgIMIw2QAAAAAAFeEBB2xwRSFZzBfMAAB__-F_wYq4ki0H6qG_wYq4sqcy6mH_wYq4ki0H6rAZAEB__8           ['Parent0']                                                                                                                                               2025-01-04T14:58:14.046Z     9999-12-31T23:59:59.999999998Z  2000             FINISHED  2025-01-04T15:00:04.236Z  2025-01-04T15:01:29.520431Z  2025-01-04T15:01:30.437889Z  2025-01-04T15:01:30.469048Z  2025-01-04T15:01:30.935081Z
-__8BAYEHAc4hvZAAAYLAUoNhdWRpdF9kYl9jaGFuZ2Vfc3RyZWFtAAGEgQCCgIMIw2QAAAAAAFiEBB2xwRSFZzBfMAAB__-F_wYq4qZ5v7GG_wYq41HqismH_wYq4qZ5v7HAZAEB__8           ['__8BAYEHAc4hvZAAAYLAUoNhdWRpdF9kYl9jaGFuZ2Vfc3RyZWFtAAGEgQCCgIMIw2QAAAAAAFeEBB2xwRSFZzBfMAAB__-F_wYq4ki0H6qG_wYq4sqcy6mH_wYq4ki0H6rAZAEB__8']           2025-01-04T15:00:04.236209Z  9999-12-31T23:59:59.999999998Z  2000             RUNNING   2025-01-04T15:07:18.358Z  2025-01-04T15:01:30.893887Z  2025-01-04T15:01:31.224797Z  2025-01-04T15:01:31.249263Z
-__8BAYEHAc4hvZAAAYLAUoNhdWRpdF9kYl9jaGFuZ2Vfc3RyZWFtAAGEgQCCgIMIw2QAAAAAAFmEBB2xwRSFZzBfMAAB__-F_wYq4qZ5v7GG_wYq4yFrmGCH_wYq4qZ5v7HAZAEB__8           ['__8BAYEHAc4hvZAAAYLAUoNhdWRpdF9kYl9jaGFuZ2Vfc3RyZWFtAAGEgQCCgIMIw2QAAAAAAFeEBB2xwRSFZzBfMAAB__-F_wYq4ki0H6qG_wYq4sqcy6mH_wYq4ki0H6rAZAEB__8']           2025-01-04T15:00:04.236209Z  9999-12-31T23:59:59.999999998Z  2000             RUNNING   2025-01-04T15:07:18.359Z  2025-01-04T15:01:30.914879Z  2025-01-04T15:01:31.224797Z  2025-01-04T15:01:31.274452Z
-__8BAYEHAc4hvZAAAYLAUoNhdWRpdF9kYl9jaGFuZ2Vfc3RyZWFtAAGEgQYC-uhQAoKCgIMIw2QAAAAAAACEBFTnRD6FZzY0Ml8zMTI0ODY5AAH__4X_BiriAUjP-4b_Birit69UD4eAwGQBAf__  ['Parent0']                                                                                                                                               2025-01-04T14:58:14.046Z     9999-12-31T23:59:59.999999998Z  2000             FINISHED  2025-01-04T15:04:52.96Z   2025-01-04T15:01:29.546335Z  2025-01-04T15:01:30.437889Z  2025-01-04T15:01:30.499935Z  2025-01-04T15:04:53.442881Z
-__8BAYEHAc4hvZAAAYLAUoNhdWRpdF9kYl9jaGFuZ2Vfc3RyZWFtAAGEgQYC-uhQAoKCgIMIw2QAAAAAAACEBFTnRD6FZzY0Ml8zMTI0ODY5AAH__4X_Birit69UD4b_BirjQJtCaoeAwGQBAf__  ['__8BAYEHAc4hvZAAAYLAUoNhdWRpdF9kYl9jaGFuZ2Vfc3RyZWFtAAGEgQYC-uhQAoKCgIMIw2QAAAAAAACEBFTnRD6FZzY0Ml8zMTI0ODY5AAH__4X_BiriAUjP-4b_Birit69UD4eAwGQBAf__']  2025-01-04T15:04:52.960271Z  9999-12-31T23:59:59.999999998Z  2000             RUNNING   2025-01-04T15:07:18.387Z  2025-01-04T15:04:53.424447Z  2025-01-04T15:04:54.290173Z  2025-01-04T15:04:54.309936Z
-harshvardhan@harshvadhansAir gcp-npp % 
+gcloud logging read "resource.type=dataflow_step AND severity=ERROR AND resource.labels.job_id=2025-01-04_16_51_47-15423036885126082476" \
+  --project=spanner-gke-443910 \
+  --format="table(timestamp, textPayload)" --limit=50
 
 
-% gcloud spanner databases execute-sql audit-db \
-    --instance=sample-instance \
-    --project=spanner-gke-443910 \
-    --sql="INSERT INTO payment_audit_trail (PUID, Action, Status, Timestamp, ServiceName) VALUES ('test-puid', 'test-action', 'success', CURRENT_TIMESTAMP(), 'test-service');"
+Dataflow Job Description
+To view detailed job information:
 
-Statement modified 1 row
-harshvardhan@harshvadhansAir gcp-npp % 
-harshvardhan@harshvadhansAir gcp-npp % 
-harshvardhan@harshvadhansAir gcp-npp % 
-harshvardhan@harshvadhansAir gcp-npp % bq query --nouse_legacy_sql \
-"SELECT *
- FROM \`spanner-gke-443910.audit_service_dataset.audit_logs\`
+gcloud dataflow jobs describe 2025-01-04_16_51_47-15423036885126082476 \
+  --region=us-central1 \
+  --project=spanner-gke-443910
+
+
+Partition Issues
+
+The error logs and metadata table show partitions in various states (RUNNING, FINISHED), but no new partitions seem to be processed, leading to potential issues with Change Stream metadata consistency.
+
+BigQuery Dataset
+Dataset: audit_service_dataset
+Table: audit_logs
+Rows: 0 (No data was reflected in BigQuery despite successful insertions in Spanner.)
+
+
+bq query --nouse_legacy_sql \
+"SELECT * FROM \`spanner-gke-443910.audit_service_dataset.audit_logs\`
  ORDER BY Timestamp DESC
  LIMIT 10;"
 
- % gcloud dataflow jobs list \
-    --region=us-central1 \
-    --project=spanner-gke-443910
 
-JOB_ID                                    NAME                 TYPE       CREATION_TIME        STATE      REGION
-2025-01-04_16_51_47-15423036885126082476  spanner-to-bigquery  Streaming  2025-01-05 00:51:47  Running    us-central1
-2025-01-04_06_56_44-73592908735007030     spanner-to-bigquery  Streaming  2025-01-04 14:56:45  Cancelled  us-central1
-2025-01-04_06_49_16-7460380326522061123   spanner-to-bigquery  Unknown    2025-01-04 14:49:16  Failed     us-central1
-2025-01-04_06_22_02-16994357834911303233  spanner-to-bigquery  Unknown    2025-01-04 14:22:02  Failed     us-central1
-2025-01-04_05_35_29-1813864163988649515   spanner-to-bigquery  Unknown    2025-01-04 13:35:30  Failed     us-central1
-2025-01-04_05_28_35-26954430256427704     spanner-to-bigquery  Unknown    2025-01-04 13:28:35  Failed     us-central1
-2025-01-04_05_09_59-16601633855182760032  spanner-to-bigquery  Unknown    2025-01-04 13:10:00  Failed     us-central1
-2025-01-04_04_55_46-11755583638643483146  spanner-to-bigquery  Unknown    2025-01-04 12:55:47  Failed     us-central1
+Test Data Insert in payment_audit_trail Table
+
+INSERT INTO payment_audit_trail (PUID, Action, Status, Timestamp, ServiceName) 
+VALUES 
+  ('test-puid', 'test-action', 'success', CURRENT_TIMESTAMP(), 'test-service');
 
 
-To get detailed information about the job, including errors, metrics, and configuration:
+This insert statement was executed successfully, but no corresponding data appeared in BigQuery.
+
+Metadata Table Inspection
+Query the metadata table to ensure that it has valid partitions:
+
+Partition Data:
+PartitionToken	ParentTokens	StartTimestamp	EndTimestamp	HeartbeatMillis	State	Watermark	CreatedAt	ScheduledAt	RunningAt	FinishedAt
+Parent0	[]	2025-01-04T14:58:14.046Z	9999-12-31T23:59:59.999999998Z	2000	FINISHED	2025-01-04T14:58:14.046Z	2025-01-04T15:01:27.858079Z	2025-01-04T15:01:28.705699Z	2025-01-04T15:01:28.733404Z	2025-01-04T15:01:29.569276Z
+8BAYEHAc4hvZAAAYLAUoNhdWRpdF9kYl9jaGFuZ2Vfc3RyZWFtAAGEgQCCgIMIw2QAAAAAAFeEBB2xwRSFZzBfMAAB-F_wYq4ki0H6qG_wYq4sqcy6mH_wYq4ki0H6rAZAEB__8	['Parent0']	2025-01-04T14:58:14.046Z	9999-12-31T23:59:59.999999998Z	2000	FINISHED	2025-01-04T15:00:04.236Z	2025-01-04T15:01:29.520431Z	2025-01-04T15:01:30.437889Z	2025-01-04T15:01:30.469048Z	2025-01-04T15:01:30.935081Z
+8BAYEHAc4hvZAAAYLAUoNhdWRpdF9kYl9jaGFuZ2Vfc3RyZWFtAAGEgQCCgIMIw2QAAAAAAFiEBB2xwRSFZzBfMAAB-F_wYq4qZ5v7GG_wYq41HqismH_wYq4qZ5v7HAZAEB__8	['8BAYEHAc4hvZAAAYLAUoNhdWRpdF9kYl9jaGFuZ2Vfc3RyZWFtAAGEgQCCgIMIw2QAAAAAAFeEBB2xwRSFZzBfMAAB-F_wYq4ki0H6qG_wYq4sqcy6mH_wYq4ki0H6rAZAEB__8']	2025-01-04T15:00:04.236209Z	9999-12-31T23:59:59.999999998Z	2000	RUNNING	2025-01-04T15:07:18.358Z	2025-01-04T15:01:30.893887Z	2025-01-04T15:01:31.224797Z	2025-01-04T15:01:31.249263Z	2025-01-04T15:01:31.274452Z
+8BAYEHAc4hvZAAAYLAUoNhdWRpdF9kYl9jaGFuZ2Vfc3RyZWFtAAGEgQCCgIMIw2QAAAAAAFmEBB2xwRSFZzBfMAAB-F_wYq4qZ5v7GG_wYq4yFrmGCH_wYq4qZ5v7HAZAEB__8	['8BAYEHAc4hvZAAAYLAUoNhdWRpdF9kYl9jaGFuZ2Vfc3RyZWFtAAGEgQCCgIMIw2QAAAAAAFeEBB2xwRSFZzBfMAAB-F_wYq4ki0H6qG_wYq4sqcy6mH_wYq4ki0H6rAZAEB__8']	2025-01-04T15:00:04.236209Z	9999-12-31T23:59:59.999999998Z	2000	RUNNING	2025-01-04T15:07:18.359Z	2025-01-04T15:01:30.914879Z	2025-01-04T15:01:31.224797Z	2025-01-04T15:01:31.274452Z	
+8BAYEHAc4hvZAAAYLAUoNhdWRpdF9kYl9jaGFuZ2Vfc3RyZWFtAAGEgQYC-uhQAoKCgIMIw2QAAAAAAACEBFTnRD6FZzY0Ml8zMTI0ODY5AAH__4X_BiriAUjP-4b_Birit69UD4eAwGQBAf	['Parent0']	2025-01-04T14:58:14.046Z	9999-12-31T23:59:59.999999998Z	2000	FINISHED	2025-01-04T15:04:52.96Z	2025-01-04T15:01:29.546335Z	2025-01-04T15:01:30.437889Z	2025-01-04T15:01:30.499935Z	2025-01-04T15:04:53.442881Z
+8BAYEHAc4hvZAAAYLAUoNhdWRpdF9kYl9jaGFuZ2Vfc3RyZWFtAAGEgQYC-uhQAoKCgIMIw2QAAAAAAACEBFTnRD6FZzY0Ml8zMTI0ODY5AAH__4X_Birit69UD4b_BirjQJtCaoeAwGQBAf	['8BAYEHAc4hvZAAAYLAUoNhdWRpdF9kYl9jaGFuZ2Vfc3RyZWFtAAGEgQYC-uhQAoKCgIMIw2QAAAAAAACEBFTnRD6FZzY0Ml8zMTI0ODY5AAH__4X_BiriAUjP-4b_Birit69UD4eAwGQBAf']	2025-01-04T15:04:52.960271Z	9999-12-31T23:59:59.999999998Z	2000	RUNNING	2025-01-04T15:07:18.387Z	2025-01-04T15:04:53.424447Z	2025-01-04T15:04:54.290173Z	2025-01-04T15:04:54.309936Z	
+
+Resolution Steps
+
+Check Change Stream Configuration: Ensure that the correct columns and operations are tracked.
+Investigate Dataflow Job Configuration: Resolve partition issues in the Dataflow pipeline.
+Confirm Metadata Table Partition Consistency: Ensure that partitions are properly initialized and processed.
+
+Conclusion
+The current issue revolves around the Change Stream partitioning mechanism, preventing data from being consumed and reflected in BigQuery. The Dataflow job is running, but issues with partitions in the metadata table hinder proper data flow. Further investigation into the Change Stream configuration and Dataflow job settings is required.
+
+For more details or troubleshooting, refer to the logs and metadata inspection results provided above.
+
+Additional Queries and Commands
+
+Insert test data into the payment_audit_trail table to simulate a stream update:
+
+gcloud spanner databases execute-sql audit-db \
+  --instance=sample-instance \
+  --project=spanner-gke-443910 \
+  --sql="INSERT INTO payment_audit_trail (PUID, Action, Timestamp, Status, ServiceName, Metadata, RetryCount, ErrorDetails) 
+  VALUES 
+  ('123e4567-e89b-12d3-a456-426614174000', 'CREATE', '2025-01-05T12:00:00Z', 'SUCCESS', 'OrderService', JSON '{\"orderId\":12345,\"amount\":100.5}', 0, NULL),
+  ('123e4567-e89b-12d3-a456-426614174001', 'UPDATE', '2025-01-05T12:05:00Z', 'FAILURE', 'PaymentService', JSON '{\"orderId\":12345,\"amount\":100.5}', 1, 'Insufficient balance'),
+  ('123e4567-e89b-12d3-a456-426614174002', 'DELETE', '2025-01-05T12:10:00Z', 'SUCCESS', 'AdminService', JSON '{\"recordId\":67890}', 0, NULL);"
+
+Verify if the Change Stream processes this update:
+
+bq query --nouse_legacy_sql \
+"SELECT * FROM \`spanner-gke-443910.audit_service_dataset.audit_logs\`
+ ORDER BY Timestamp DESC
+ LIMIT 10;"
+
+Display BigQuery table information:
+
+bq show spanner-gke-443910:audit_service_dataset.audit_logs
+
+View Dataflow job status:
+
+gcloud dataflow jobs list --region=us-central1
+
+gcloud dataflow jobs describe 2025-01-04_19_37_19-13419870172193443123 \
+  --region=us-central1 \
+  --project=spanner-gke-443910
 
 
+**Stream the logs in real-time:**
 
- % gcloud dataflow jobs describe 2025-01-04_16_51_47-15423036885126082476 \
+gcloud logging read "resource.type=dataflow_step AND resource.labels.job_id=2025-01-04_19_37_19-13419870172193443123" \
+  --project=spanner-gke-443910 \
+  --format="table(timestamp, textPayload)" --limit=50
+
+
+Fetch only error logs:
+
+gcloud logging read "resource.type=dataflow_step AND severity=ERROR AND resource.labels.job_id=2025-01-04_19_37_19-13419870172193443123" \
+  --project=spanner-gke-443910 \
+  --format="table(timestamp, textPayload)" --limit=50
+
+Inspect worker logs:
+
+gcloud logging read "resource.type=dataflow_step AND resource.labels.job_id=2025-01-04_19_37_19-13419870172193443123 AND logName:worker" \
+  --project=spanner-gke-443910 \
+  --format="table(timestamp, textPayload)" --limit=50
+
+
+Dataflow Logs Example (Streamed in Real-Time)
+
+% gcloud logging read "resource.type=dataflow_step AND resource.labels.job_id=2025-01-04_19_37_19-13419870172193443123" \
+    --project=spanner-gke-443910 \
+    --format="table(timestamp, textPayload)" \
+    --limit=50
+
+TIMESTAMP                    TEXT_PAYLOAD
+2025-01-05T05:46:45.072Z
+2025-01-05T05:46:43.912Z
+2025-01-05T05:46:42.974Z
+2025-01-05T05:46:42.194Z
+2025-01-05T05:46:41.293Z
+2025-01-05T05:46:40.071Z
+2025-01-05T05:46:38.940Z
+2025-01-05T05:46:37.922Z
+2025-01-05T05:46:37.259Z
+2025-01-05T05:46:36.132Z
+2025-01-05T05:46:35.182Z
+2025-01-05T05:46:34.110Z
+2025-01-05T05:46:32.932Z
+2025-01-05T05:46:32.098Z
+2025-01-05T05:46:31.022Z
+2025-01-05T05:46:29.951Z
+2025-01-05T05:46:29.044Z
+2025-01-05T05:46:28.385Z
+2025-01-05T05:46:27.290Z
+2025-01-05T05:46:26.077539Z
+2025-01-05T05:46:26.015Z
+2025-01-05T05:46:25.048Z
+2025-01-05T05:46:24.189Z
+2025-01-05T05:46:23.248Z
+2025-01-05T05:46:22.018Z
+2025-01-05T05:46:21.247Z
+2025-01-05T05:46:19.909Z
+
+
+**Dataflow Job Description**
+
+% gcloud dataflow jobs describe 2025-01-04_16_51_47-15423036885126082476 \
     --region=us-central1 \
     --project=spanner-gke-443910
 
@@ -261,141 +360,14 @@ startTime: '2025-01-05T00:51:47.808277Z'
 type: JOB_TYPE_STREAMING
 
 
- Describe the Job
-To get detailed information about the job, including errors, metrics, and configuration:
 
 
-gcloud dataflow jobs describe 2025-01-04_16_51_47-15423036885126082476 \
-    --region=us-central1 \
-    --project=spanner-gke-443910
-
-
-Stream Logs in Real-Time
-To stream the logs of this Dataflow job, use:
-
-
-gcloud logging read "resource.type=dataflow_step AND resource.labels.job_id=2025-01-04_16_51_47-15423036885126082476" \
-    --project=spanner-gke-443910 \
-    --format="table(timestamp, textPayload)" --limit=50
-
-
-Fetch Only Error Logs
-To narrow down issues related to errors in the job:
-
-gcloud logging read "resource.type=dataflow_step AND severity=ERROR AND resource.labels.job_id=2025-01-04_16_51_47-15423036885126082476" \
-    --project=spanner-gke-443910 \
-    --format="table(timestamp, textPayload)" --limit=50
-
-Inspect Worker Logs
-If you suspect issues with workers, you can inspect worker logs:
-
-gcloud logging read "resource.type=dataflow_step AND resource.labels.job_id=2025-01-04_16_51_47-15423036885126082476 AND logName:worker" \
-    --project=spanner-gke-443910 \
-    --format="table(timestamp, textPayload)" --limit=50
-
-Monitor Metrics
-To monitor pipeline performance, use:
-
-gcloud dataflow metrics list 2025-01-04_16_51_47-15423036885126082476 \
-    --region=us-central1 \
-    --project=spanner-gke-443910
-
-
-
-Verify Metadata Table for Change Streams
-Run the following query to ensure that the metadata tables required for Change Streams are properly set up:
-
-gcloud spanner databases execute-sql audit-db \
-    --instance=sample-instance \
-    --project=spanner-gke-443910 \
-    --sql="SELECT * FROM information_schema.change_stream_tables WHERE change_stream_name = 'audit_db_change_stream';"
-
-CHANGE_STREAM_CATALOG  CHANGE_STREAM_SCHEMA  CHANGE_STREAM_NAME      TABLE_CATALOG  TABLE_SCHEMA  TABLE_NAME           ALL_COLUMNS
-                                             audit_db_change_stream                               payment_audit_trail  True
-
-Query the metadata table (Metadata_audit_db_*) to ensure that it has valid partitions:
-
-gcloud spanner databases execute-sql audit-db \
-    --instance=sample-instance \
-    --project=spanner-gke-443910 \
-    --sql="SELECT * FROM Metadata_audit_db_4e6d5eb7_55ac_4b6e_8c0f_0210cd719005;"
-
-PartitionToken                                                                                                                                        ParentTokens                                                                                                                                              StartTimestamp               EndTimestamp                    HeartbeatMillis  State     Watermark                 CreatedAt                    ScheduledAt                  RunningAt                    FinishedAt
-Parent0                                                                                                                                               []                                                                                                                                                        2025-01-04T14:58:14.046Z     9999-12-31T23:59:59.999999998Z  2000             FINISHED  2025-01-04T14:58:14.046Z  2025-01-04T15:01:27.858079Z  2025-01-04T15:01:28.705699Z  2025-01-04T15:01:28.733404Z  2025-01-04T15:01:29.569276Z
-__8BAYEHAc4hvZAAAYLAUoNhdWRpdF9kYl9jaGFuZ2Vfc3RyZWFtAAGEgQCCgIMIw2QAAAAAAFeEBB2xwRSFZzBfMAAB__-F_wYq4ki0H6qG_wYq4sqcy6mH_wYq4ki0H6rAZAEB__8           ['Parent0']                                                                                                                                               2025-01-04T14:58:14.046Z     9999-12-31T23:59:59.999999998Z  2000             FINISHED  2025-01-04T15:00:04.236Z  2025-01-04T15:01:29.520431Z  2025-01-04T15:01:30.437889Z  2025-01-04T15:01:30.469048Z  2025-01-04T15:01:30.935081Z
-__8BAYEHAc4hvZAAAYLAUoNhdWRpdF9kYl9jaGFuZ2Vfc3RyZWFtAAGEgQCCgIMIw2QAAAAAAFiEBB2xwRSFZzBfMAAB__-F_wYq4qZ5v7GG_wYq41HqismH_wYq4qZ5v7HAZAEB__8           ['__8BAYEHAc4hvZAAAYLAUoNhdWRpdF9kYl9jaGFuZ2Vfc3RyZWFtAAGEgQCCgIMIw2QAAAAAAFeEBB2xwRSFZzBfMAAB__-F_wYq4ki0H6qG_wYq4sqcy6mH_wYq4ki0H6rAZAEB__8']           2025-01-04T15:00:04.236209Z  9999-12-31T23:59:59.999999998Z  2000             RUNNING   2025-01-04T15:07:18.358Z  2025-01-04T15:01:30.893887Z  2025-01-04T15:01:31.224797Z  2025-01-04T15:01:31.249263Z
-__8BAYEHAc4hvZAAAYLAUoNhdWRpdF9kYl9jaGFuZ2Vfc3RyZWFtAAGEgQCCgIMIw2QAAAAAAFmEBB2xwRSFZzBfMAAB__-F_wYq4qZ5v7GG_wYq4yFrmGCH_wYq4qZ5v7HAZAEB__8           ['__8BAYEHAc4hvZAAAYLAUoNhdWRpdF9kYl9jaGFuZ2Vfc3RyZWFtAAGEgQCCgIMIw2QAAAAAAFeEBB2xwRSFZzBfMAAB__-F_wYq4ki0H6qG_wYq4sqcy6mH_wYq4ki0H6rAZAEB__8']           2025-01-04T15:00:04.236209Z  9999-12-31T23:59:59.999999998Z  2000             RUNNING   2025-01-04T15:07:18.359Z  2025-01-04T15:01:30.914879Z  2025-01-04T15:01:31.224797Z  2025-01-04T15:01:31.274452Z
-__8BAYEHAc4hvZAAAYLAUoNhdWRpdF9kYl9jaGFuZ2Vfc3RyZWFtAAGEgQYC-uhQAoKCgIMIw2QAAAAAAACEBFTnRD6FZzY0Ml8zMTI0ODY5AAH__4X_BiriAUjP-4b_Birit69UD4eAwGQBAf__  ['Parent0']                                                                                                                                               2025-01-04T14:58:14.046Z     9999-12-31T23:59:59.999999998Z  2000             FINISHED  2025-01-04T15:04:52.96Z   2025-01-04T15:01:29.546335Z  2025-01-04T15:01:30.437889Z  2025-01-04T15:01:30.499935Z  2025-01-04T15:04:53.442881Z
-__8BAYEHAc4hvZAAAYLAUoNhdWRpdF9kYl9jaGFuZ2Vfc3RyZWFtAAGEgQYC-uhQAoKCgIMIw2QAAAAAAACEBFTnRD6FZzY0Ml8zMTI0ODY5AAH__4X_Birit69UD4b_BirjQJtCaoeAwGQBAf__  ['__8BAYEHAc4hvZAAAYLAUoNhdWRpdF9kYl9jaGFuZ2Vfc3RyZWFtAAGEgQYC-uhQAoKCgIMIw2QAAAAAAACEBFTnRD6FZzY0Ml8zMTI0ODY5AAH__4X_BiriAUjP-4b_Birit69UD4eAwGQBAf__']  2025-01-04T15:04:52.960271Z  9999-12-31T23:59:59.999999998Z  2000             RUNNING   2025-01-04T15:07:18.387Z  2025-01-04T15:04:53.424447Z  2025-01-04T15:04:54.290173Z  2025-01-04T15:04:54.309936Z
-harshvardhan@harshvadhansAir gcp-npp % 
-
-
-Insert test data into the payment_audit_trail table to simulate a stream update:
-
-% gcloud spanner databases execute-sql audit-db \
-    --instance=sample-instance \
-    --project=spanner-gke-443910 \
-    --sql="INSERT INTO payment_audit_trail (PUID, Action, Status, Timestamp, ServiceName) VALUES ('test-puid', 'test-action', 'success', CURRENT_TIMESTAMP(), 'test-service');"
-
-Statement modified 1 row
-
-Check if the Change Stream processes this update:
-
-
-bq query --nouse_legacy_sql \
-"SELECT * FROM \`spanner-gke-443910.audit_service_dataset.audit_logs\`
- ORDER BY Timestamp DESC
- LIMIT 10;"
-
-
-####
-
-
-Google Cloud Spanner Change Stream feeding data to a BigQuery dataset via a Dataflow pipeline. However, there are issues causing the Dataflow pipeline to throw errors such as:
-
-Error: Initial partition not found in metadata table.
-Despite data being inserted into Spanner (INSERT INTO payment_audit_trail succeeded), there is no reflection in BigQuery when queried.
-Findings and Possible Causes
-Change Stream Configuration
-
-The Change Stream audit_db_change_stream is correctly configured for the payment_audit_trail table (verified via CHANGE_STREAM_NAME and TABLE_NAME queries).
-ALL is False, meaning only explicitly defined columns or actions might be tracked. Verify if the necessary columns and operations (INSERT, UPDATE, DELETE) are tracked.
-Dataflow Worker Errors
-
-Errors indicate a partition problem: Initial partition not found in metadata table.
-This suggests that the Dataflow pipeline cannot correctly read from the metadata table for the Change Stream.
-The Metadata_audit_db_... table shows partitions in various states (e.g., RUNNING, FINISHED). However, no new partitions seem to be processed, implying a potential issue with Change Stream metadata consistency or job configuration.
-BigQuery Dataset
-
-No data appears in BigQuery after the Dataflow pipeline has processed data.
-This could result from either:
-The Dataflow pipeline not correctly consuming the Change Stream data.
-Misconfiguration in the Dataflow job's BigQuery output settings.
-Dataflow Pipeline State
-
-The job is RUNNING, but worker logs indicate partition issues. Without resolving the partition issue, restarting may result in the same errors.
-
-
-
-% gcloud spanner databases execute-sql audit-db \
-    --instance=sample-instance \
-    --project=spanner-gke-443910 \
-    --sql="INSERT INTO payment_audit_trail (PUID, Action, Timestamp, Status, ServiceName, Metadata, RetryCount, ErrorDetails) VALUES
-    ('123e4567-e89b-12d3-a456-426614174000', 'CREATE', '2025-01-05T12:00:00Z', 'SUCCESS', 'OrderService', JSON '{\"orderId\":12345,\"amount\":100.5}', 0, NULL),
-    ('123e4567-e89b-12d3-a456-426614174001', 'UPDATE', '2025-01-05T12:05:00Z', 'FAILURE', 'PaymentService', JSON '{\"orderId\":12345,\"amount\":100.5}', 1, 'Insufficient balance'),
-    ('123e4567-e89b-12d3-a456-426614174002', 'DELETE', '2025-01-05T12:10:00Z', 'SUCCESS', 'AdminService', JSON '{\"recordId\":67890}', 0, NULL);"
-
-Statement modified 3 rows
-
-
-
-
-
-
+**BigQuery Table Schema and Metadata**
 
 % bq show spanner-gke-443910:audit_service_dataset.audit_logs
 
 Table spanner-gke-443910:audit_service_dataset.audit_logs
+
 gcloud dataflow jobs list --region=us-central1
 
    Last modified                  Schema                 Total Rows   Total Bytes   Expiration   Time Partitioning   Clustered Fields   Total Logical Bytes   Total Physical Bytes   Labels  
@@ -409,30 +381,11 @@ gcloud dataflow jobs list --region=us-central1
                     |- RetryCount: integer                                                                                                                                                   
                     |- ErrorDetails: string                                                                                                                                                  
 
-harshvardhan@harshvadhansAir terraform % gcloud dataflow jobs list --region=us-central1
 
-JOB_ID                                    NAME                 TYPE       CREATION_TIME        STATE      REGION
-2025-01-04_19_37_19-13419870172193443123  spanner-to-bigquery  Streaming  2025-01-05 03:37:19  Running    us-central1
-2025-01-04_06_56_44-73592908735007030     spanner-to-bigquery  Streaming  2025-01-04 14:56:45  Cancelled  us-central1
-2025-01-04_18_13_58-1673212780683485169   spanner-to-bigquery  Streaming  2025-01-05 02:13:59  Cancelled  us-central1
-2025-01-04_16_51_47-15423036885126082476  spanner-to-bigquery  Streaming  2025-01-05 00:51:47  Cancelled  us-central1
-2025-01-04_06_49_16-7460380326522061123   spanner-to-bigquery  Unknown    2025-01-04 14:49:16  Failed     us-central1
-2025-01-04_06_22_02-16994357834911303233  spanner-to-bigquery  Unknown    2025-01-04 14:22:02  Failed     us-central1
-2025-01-04_05_35_29-1813864163988649515   spanner-to-bigquery  Unknown    2025-01-04 13:35:30  Failed     us-central1
-2025-01-04_05_28_35-26954430256427704     spanner-to-bigquery  Unknown    2025-01-04 13:28:35  Failed     us-central1
-2025-01-04_05_09_59-16601633855182760032  spanner-to-bigquery  Unknown    2025-01-04 13:10:00  Failed     us-central1
-2025-01-04_04_55_46-11755583638643483146  spanner-to-bigquery  Unknown    2025-01-04 12:55:47  Failed     us-central1
-2025-01-04_04_46_02-11639098948213274292  spanner-to-bigquery  Unknown    2025-01-04 12:46:02  Failed     us-central1
-2025-01-04_04_35_23-2921259705800783365   spanner-to-bigquery  Unknown    2025-01-04 12:35:24  Failed     us-central1
-2025-01-04_04_28_21-9658543711496298300   spanner-to-bigquery  Unknown    2025-01-04 12:28:22  Failed     us-central1
-2025-01-04_04_17_18-9012047697012476975   spanner-to-bigquery  Unknown    2025-01-04 12:17:18  Failed     us-central1
-2025-01-04_04_09_19-15252959241481481967  spanner-to-bigquery  Unknown    2025-01-04 12:09:20  Failed     us-central1
-2025-01-04_03_54_40-9865990877858794056   spanner-to-bigquery  Unknown    2025-01-04 11:54:41  Failed     us-central1
-2025-01-04_03_50_54-13982673090286706960  spanner-to-bigquery  Unknown    2025-01-04 11:50:55  Failed     us-central1
-2025-01-04_03_32_16-957028190932199157    spanner-to-bigquery  Unknown    2025-01-04 11:32:17  Failed     us-central1
-2025-01-04_03_26_42-7804094476833774955   spanner-to-bigquery  Unknown    2025-01-04 11:26:43  Failed     us-central1
-2025-01-04_03_11_47-6145158651867668584   spanner-to-bigquery  Unknown    2025-01-04 11:11:48  Failed     us-central1
-harshvardhan@harshvadhansAir terraform % bq query --nouse_legacy_sql \
+BigQuery Row Count Query
+
+
+% bq query --nouse_legacy_sql \
 "SELECT COUNT(*) AS total_rows FROM \`spanner-gke-443910.audit_service_dataset.audit_logs\`"
 
 +------------+
@@ -441,14 +394,16 @@ harshvardhan@harshvadhansAir terraform % bq query --nouse_legacy_sql \
 |          0 |
 +------------+
 
+Test Data Insert into BigQuery
 
 % echo '{"PUID":"test-id","Action":"CREATE","Timestamp":"2025-01-05T12:00:00Z","Status":"SUCCESS","ServiceName":"TestService","Metadata":"{\"key\":\"value\"}","RetryCount":0,"ErrorDetails":null}' > payload.json
 
-harshvardhan@harshvadhansAir terraform % bq insert spanner-gke-443910:audit_service_dataset.audit_logs payload.json
+% bq insert spanner-gke-443910:audit_service_dataset.audit_logs payload.json
 
-harshvardhan@harshvadhansAir terraform % 
-harshvardhan@harshvadhansAir terraform % 
-harshvardhan@harshvadhansAir terraform % bq query --nouse_legacy_sql \
+
+Query to Verify Data in BigQuery
+
+% bq query --nouse_legacy_sql \
 "SELECT * FROM \`spanner-gke-443910.audit_service_dataset.audit_logs\`
  ORDER BY Timestamp DESC
  LIMIT 10;"
@@ -458,66 +413,134 @@ harshvardhan@harshvadhansAir terraform % bq query --nouse_legacy_sql \
 +---------+--------+---------------------+---------+-------------+-----------------+------------+--------------+
 | test-id | CREATE | 2025-01-05 12:00:00 | SUCCESS | TestService | {"key":"value"} |          0 | NULL         |
 +---------+--------+---------------------+---------+-------------+-----------------+------------+--------------+
-harshvardhan@harshvadhansAir terraform % ≈
 
 
-gcloud dataflow jobs list --region=us-central1
 
-JOB_ID                                    NAME                 TYPE       CREATION_TIME        STATE      REGION
-2025-01-04_19_37_19-13419870172193443123  spanner-to-bigquery  Streaming  2025-01-05 03:37:19  Running    us-central1
-2025-01-04_06_56_44-73592908735007030     spanner-to-bigquery  Streaming  2025-01-04 14:56:45  Cancelled  us-central1
-2025-01-04_18_13_58-1673212780683485169   spanner-to-bigquery  Streaming  2025-01-05 02:13:59  Cancelled  us-central1
-2025-01-04_16_51_47-15423036885126082476  spanner-to-bigquery  Streaming  2025-01-05 00:51:47  Cancelled  us-central1
-2025-01-04_06_49_16-7460380326522061123   spanner-to-bigquery  Unknown    2025-01-04 14:49:16  Failed     us-central1
-2025-01-04_06_22_02-16994357834911303233  spanner-to-bigquery  Unknown    2025-01-04 14:22:02  Failed     us-central1
-2025-01-04_05_35_29-1813864163988649515   spanner-to-bigquery  Unknown    2025-01-04 13:35:30  Failed     us-central1
-2025-01-04_05_28_35-26954430256427704     spanner-to-bigquery  Unknown    2025-01-04 13:28:35  Failed     us-central1
-2025-01-04_05_09_59-16601633855182760032  spanner-to-bigquery  Unknown    2025-01-04 13:10:00  Failed     us-central1
-2025-01-04_04_55_46-11755583638643483146  spanner-to-bigquery  Unknown    2025-01-04 12:55:47  Failed     us-central1
-2025-01-04_04_46_02-11639098948213274292  spanner-to-bigquery  Unknown    2025-01-04 12:46:02  Failed     us-central1
-2025-01-04_04_35_23-2921259705800783365   spanner-to-bigquery  Unknown    2025-01-04 12:35:24  Failed     us-central1
-2025-01-04_04_28_21-9658543711496298300   spanner-to-bigquery  Unknown    2025-01-04 12:28:22  Failed     us-central1
-2025-01-04_04_17_18-9012047697012476975   spanner-to-bigquery  Unknown    2025-01-04 12:17:18  Failed     us-central1
-2025-01-04_04_09_19-15252959241481481967  spanner-to-bigquery  Unknown    2025-01-04 12:09:20  Failed     us-central1
-2025-01-04_03_54_40-9865990877858794056   spanner-to-bigquery  Unknown    2025-01-04 11:54:41  Failed     us-central1
-2025-01-04_03_50_54-13982673090286706960  spanner-to-bigquery  Unknown    2025-01-04 11:50:55  Failed     us-central1
-2025-01-04_03_32_16-957028190932199157    spanner-to-bigquery  Unknown    2025-01-04 11:32:17  Failed     us-central1
-2025-01-04_03_26_42-7804094476833774955   spanner-to-bigquery  Unknown    2025-01-04 11:26:43  Failed     us-central1
-2025-01-04_03_11_47-6145158651867668584   spanner-to-bigquery  Unknown    2025-01-04 11:11:48  Failed     us-central1
-harshvardhan@harshvadhansAir terraform % gcloud logging read "resource.type=dataflow_step AND resource.labels.job_id=2025-01-04_19_37_19-13419870172193443123" \
-    --project=spanner-gke-443910 \
-    --format="table(timestamp, textPayload)" \
-    --limit=50
 
-TIMESTAMP                    TEXT_PAYLOAD
-2025-01-05T05:46:45.072Z
-2025-01-05T05:46:43.912Z
-2025-01-05T05:46:42.974Z
-2025-01-05T05:46:42.194Z
-2025-01-05T05:46:41.293Z
-2025-01-05T05:46:40.071Z
-2025-01-05T05:46:38.940Z
-2025-01-05T05:46:37.922Z
-2025-01-05T05:46:37.259Z
-2025-01-05T05:46:36.132Z
-2025-01-05T05:46:35.182Z
-2025-01-05T05:46:34.110Z
-2025-01-05T05:46:32.932Z
-2025-01-05T05:46:32.098Z
-2025-01-05T05:46:31.022Z
-2025-01-05T05:46:29.951Z
-2025-01-05T05:46:29.044Z
-2025-01-05T05:46:28.385Z
-2025-01-05T05:46:27.290Z
-2025-01-05T05:46:26.077539Z
-2025-01-05T05:46:26.015Z
-2025-01-05T05:46:25.048Z
-2025-01-05T05:46:24.189Z
-2025-01-05T05:46:23.248Z
-2025-01-05T05:46:22.018Z
-2025-01-05T05:46:21.247Z
-2025-01-05T05:46:19.909Z
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#$$$$$$$$$$$
+###########
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+###########
+
+####
+
+# Dataflow Job Overview - Spanner to BigQuery Pipeline
+
+This document provides an overview of the Spanner-to-BigQuery Dataflow pipeline, detailing the dataset configuration, schema, Dataflow job details, and troubleshooting steps for issues in the pipeline.
+
+## Dataset Details
+
+- **Dataset ID**: `audit_service_dataset`
+- **Project ID**: `spanner-gke-443910`
+- **Location**: `us-central1`
+- **Labels**:
+  - `environment`: `dev`
+  - `team`: `service-support-squad`
+  
+### IAM Access Roles
+- **WRITER**: `dataflow-sa@spanner-gke-443910.iam.gserviceaccount.com`
+- **OWNER**: `cloudbuild-cicd@spanner-gke-443910.iam.gserviceaccount.com`
+
+These roles ensure that Dataflow and Cloud Build have the necessary permissions to interact with the dataset.
+
+## Tables
+
+### `audit_logs` Table Schema
+
+| Column Name   | Type          | Required |
+| ------------- | ------------- | -------- |
+| `PUID`        | STRING        | Yes      |
+| `Action`      | STRING        | Yes      |
+| `Timestamp`   | TIMESTAMP     | Yes      |
+| `Status`      | STRING        | No       |
+| `ServiceName` | STRING        | No       |
+| `Metadata`    | JSON          | No       |
+| `RetryCount`  | INT64         | No       |
+| `ErrorDetails`| STRING        | No       |
+
+### Spanner Change Stream Setup
+
+- **Change Stream Name**: `audit_db_change_stream`
+- **Associated Table**: `payment_audit_trail`
+- **Change Stream Configuration**: 
+  - Tracks specific columns and operations (INSERT, UPDATE, DELETE)
+  - Not all columns are tracked (ALL = False)
+
+## Dataflow Pipeline Details
+
+### Dataflow Jobs
+
+- **Job Name**: `spanner-to-bigquery`
+- **Job Type**: `Streaming`
+- **Region**: `us-central1`
+- **State**: `Running`
+- **Created**: `2025-01-05 00:51:47`
+- **Pipeline**: `spanner-to-bigquery`
+- **Dataflow Template Version**: `2024-10-01-00_rc00`
+  
+#### Job Logs and State
+
+- The Dataflow job is currently in a `RUNNING` state.
+- Logs indicate errors related to partition issues: "Initial partition not found in metadata table."
+
+### Dataflow Logs Streaming
+
+To stream the logs of the Dataflow job:
+
+```bash
+gcloud logging read "resource.type=dataflow_step AND resource.labels.job_id=2025-01-04_16_51_47-15423036885126082476" \
+  --project=spanner-gke-443910 \
+  --format="table(timestamp, textPayload)" --limit=50
+
+
+
+
+
+
+###############
 % bq show spanner-gke-443910:audit_service_dataset.audit_logs
 
 
@@ -905,6 +928,230 @@ harshvardhan@harshvadhansAir terraform % bq show --format=prettyjson spanner-gke
   },
   "type": "TABLE"
 }
+
+
+
+
+
+
+
+$$$$$$$$$$$$$$$ < 938>
+
+# DataFlow & Spanner Integration Documentation
+
+## Use-Cases
+
+### 1) Existing Step-up
+
+**No Active Dataflow Job**
+
+```bash
+% gcloud dataflow jobs list --region=us-central1
+JOB_ID                                    NAME                 TYPE       CREATION_TIME        STATE      REGION
+2025-01-04_19_37_19-13419870172193443123  spanner-to-bigquery  Streaming  2025-01-05 03:37:19  Cancelled  us-central1
+2025-01-04_06_56_44-73592908735007030     spanner-to-bigquery  Streaming  2025-01-04 14:56:45  Cancelled  us-central1
+2025-01-04_18_13_58-1673212780683485169   spanner-to-bigquery  Streaming  2025-01-05 02:13:59  Cancelled  us-central1
+2025-01-04_16_51_47-15423036885126082476  spanner-to-bigquery  Streaming  2025-01-05 00:51:47  Cancelled  us-central1
+
+
+2) Existing DB & its Tables
+A) List Databases in Spanner
+
+% gcloud spanner databases list \
+    --instance=sample-instance \
+    --project=spanner-gke-443910
+
+NAME             STATE  VERSION_RETENTION_PERIOD  EARLIEST_VERSION_TIME        KMS_KEY_NAME  ENABLE_DROP_PROTECTION
+audit-db         READY  1h                        2025-01-06T23:43:15.955351Z
+sample-audit-db  READY  1h                        2025-01-06T23:43:15.955354Z
+sample-game      READY  1h                        2025-01-06T23:43:15.955355Z
+shared-db        READY  1h                        2025-01-06T23:43:15.955356Z
+
+B-0) List Tables in shared-db
+
+
+% gcloud spanner databases execute-sql shared-db \
+    --instance=sample-instance \
+    --project=spanner-gke-443910 \
+    --sql="SELECT table_name FROM information_schema.tables WHERE table_schema = '';"
+
+table_name
+payment_audit_trail
+Payments
+Reconciliation
+Transactions
+
+B-1) List Tables in audit-db
+
+% gcloud spanner databases execute-sql audit-db \
+    --instance=sample-instance \
+    --project=spanner-gke-443910 \
+    --sql="SELECT table_name FROM information_schema.tables WHERE table_schema = '';"
+
+table_name
+Metadata_audit_db_3017dd79_c6d9_4e2e_ad54_16dfd49398d6
+payment_audit_trail
+
+Where:
+--instance: Specifies the Spanner instance name (sample-instance).
+--project: Specifies the project ID (spanner-gke-443910).
+--sql: Executes the SQL query to fetch the table names from the information_schema.tables where table_schema is empty.
+
+
+3) Associated ChangeStream with the Database
+
+% gcloud spanner databases execute-sql audit-db \
+    --instance=sample-instance \
+    --project=spanner-gke-443910 \
+    --sql="SELECT change_stream_name FROM information_schema.change_streams;"
+
+change_stream_name
+audit_db_change_stream
+
+% gcloud spanner databases execute-sql audit-db \
+    --instance=sample-instance \
+    --project=spanner-gke-443910 \
+    --sql="SELECT * FROM information_schema.change_streams;"
+
+CHANGE_STREAM_CATALOG  CHANGE_STREAM_SCHEMA  CHANGE_STREAM_NAME      ALL
+                                             audit_db_change_stream  False
+
+
+
+4) Verify Change Stream Target Table
+
+% gcloud spanner databases execute-sql audit-db \
+    --instance=sample-instance \
+    --project=spanner-gke-443910 \
+    --sql="SELECT table_name FROM information_schema.change_stream_tables WHERE change_stream_name = 'audit_db_change_stream';"
+
+table_name
+payment_audit_trail
+
+
+5) List Schema Details for Each Table
+
+A) Schema for audit-db
+
+% gcloud spanner databases execute-sql audit-db \
+    --instance=sample-instance \
+    --project=spanner-gke-443910 \
+    --sql="
+        SELECT
+            t.table_name,
+            c.column_name,
+            c.spanner_type,
+            c.is_nullable
+        FROM
+            information_schema.tables AS t
+        JOIN
+            information_schema.columns AS c
+        ON
+            t.table_name = c.table_name
+        WHERE
+            t.table_schema = ''
+        ORDER BY
+            t.table_name, c.ordinal_position;"
+
+
+Output:
+
+
+Table Name	Column Name	Spanner Type	Is Nullable
+Metadata_audit_db_3017dd79_c6d9_4e2e_ad54_16dfd49398d6	PartitionToken	STRING(MAX)	NO
+Metadata_audit_db_3017dd79_c6d9_4e2e_ad54_16dfd49398d6	ParentTokens	ARRAY<STRING(MAX)>	NO
+Metadata_audit_db_3017dd79_c6d9_4e2e_ad54_16dfd49398d6	StartTimestamp	TIMESTAMP	NO
+...	...	...	...
+
+
+B) Schema for shared-db
+
+
+% gcloud spanner databases execute-sql shared-db \
+    --instance=sample-instance \
+    --project=spanner-gke-443910 \
+    --sql="
+        SELECT
+            t.table_name,
+            c.column_name,
+            c.spanner_type,
+            c.is_nullable
+        FROM
+            information_schema.tables AS t
+        JOIN
+            information_schema.columns AS c
+        ON
+            t.table_name = c.table_name
+        WHERE
+            t.table_schema = ''
+        ORDER BY
+            t.table_name, c.ordinal_position;"
+
+
+6) Fetch and Display Metadata About the audit_logs Table
+
+
+% bq show spanner-gke-443910:audit_service_dataset
+Dataset spanner-gke-443910:audit_service_dataset
+
+   Last modified                                ACLs                                          Labels              Type     Max time travel (Hours)  
+ ----------------- --------------------------------------------------------------- ---------------------------- --------- ------------------------- 
+  04 Jan 16:29:35   Owners:                                                         environment:dev              DEFAULT   168                      
+                      cloudbuild-cicd@spanner-gke-443910.iam.gserviceaccount.com,   team:service-support-squad                                      
+                      projectOwners                                                                                                                 
+
+
+Adding Data and Managing Changes in BigQuery and Spanner
+
+Insert Test Data into BigQuery
+
+
+% echo '{"PUID":"test-id","Action":"CREATE","Timestamp":"2025-01-05T12:00:00Z","Status":"SUCCESS","ServiceName":"TestService","Metadata":"{\"key\":\"value\"}","RetryCount":0,"ErrorDetails":null}' > payload.json
+
+% bq insert spanner-gke-443910:audit_service_dataset.audit_logs payload.json
+
+
+Verify Data in BigQuery
+
+
+% bq query --nouse_legacy_sql \
+"SELECT * FROM \`spanner-gke-443910.audit_service_dataset.audit_logs\`
+ ORDER BY Timestamp DESC
+ LIMIT 10;"
+
++---------+--------+---------------------+---------+-------------+-----------------+------------+--------------+
+|  PUID   | Action |      Timestamp      | Status  | ServiceName |    Metadata     | RetryCount | ErrorDetails |
++---------+--------+---------------------+---------+-------------+-----------------+------------+--------------+
+| test-id | CREATE | 2025-01-05 12:00:00 | SUCCESS | TestService | {"key":"value"} |          0 | NULL         |
++---------+--------+---------------------+---------+-------------+-----------------+------------+--------------+
+
+
+Test Cases
+
+1) Manually Insert Data into the Table Monitored by ChangeStream & Ensure Data Reflection in BigQuery via Dataflow
+Insert Data into Spanner Table
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 **Use-Cases**
