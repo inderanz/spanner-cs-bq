@@ -398,3 +398,29 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
+# Terraform state files
+*.tfstate
+*.tfstate.*
+
+# Crash logs
+crash.log
+
+# Terraform variables
+*.tfvars.json
+
+# Terraform plan files
+*.tfplan
+
+# Directory for Terraform providers
+.terraform/*
+**/.terraform/*
+
+
+# Lock files
+.terraform.lock.hcl
+
+# Sensitive backup files
+*_override.tf
+*_override.tf.json
+*.backup
