@@ -20,7 +20,7 @@ data "google_compute_subnetwork" "subnet" {
 }
 
 # Storage Configuration
-resource "google_storage_bucket" "dataflow_temp_2" {
+resource "google_storage_bucket" "dataflow_temp_3" {
   count    = var.temp_bucket_name != "" ? 1 : 0
   name     = var.temp_bucket_name
   location = var.region
@@ -50,7 +50,7 @@ resource "google_dataflow_flex_template_job" "dataflow_flex_job" {
   subnetwork            = var.subnetwork_name != "" ? "regions/${var.region}/subnetworks/${var.subnetwork_name}" : null
 
   container_spec_gcs_path = var.template_gcs_path
-  temp_location           = var.temp_bucket_name != "" ? "gs://${google_storage_bucket.dataflow_temp_2[0].name}/temp" : null
+  temp_location           = var.temp_bucket_name != "" ? "gs://${google_storage_bucket.dataflow_temp_3[0].name}/temp" : null
   parameters              = merge(var.parameters, var.additional_parameters)
   labels                  = var.labels
 }
