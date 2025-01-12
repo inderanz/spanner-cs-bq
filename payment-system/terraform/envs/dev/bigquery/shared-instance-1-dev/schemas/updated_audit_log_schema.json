@@ -1,0 +1,24 @@
+[
+    {"name": "PUID", "type": "STRING", "mode": "REQUIRED"},
+    {"name": "Action", "type": "STRING", "mode": "REQUIRED"},
+    {"name": "Status", "type": "STRING", "mode": "NULLABLE"},
+    {"name": "Timestamp", "type": "TIMESTAMP", "mode": "REQUIRED"},
+    {"name": "ServiceName", "type": "STRING", "mode": "NULLABLE"},
+    {"name": "Metadata", "type": "JSON", "mode": "NULLABLE"},
+    {"name": "RetryCount", "type": "INT64", "mode": "NULLABLE"},
+    {"name": "ErrorDetails", "type": "STRING", "mode": "NULLABLE"},
+    {"name": "_metadata_spanner_mod_type", "type": "STRING", "mode": "NULLABLE"},
+    {"name": "_metadata_spanner_table_name", "type": "STRING", "mode": "NULLABLE"},
+    {"name": "_metadata_spanner_commit_timestamp", "type": "TIMESTAMP", "mode": "NULLABLE"},
+    {"name": "_metadata_spanner_server_transaction_id", "type": "STRING", "mode": "NULLABLE"},
+    {"name": "_metadata_spanner_record_sequence", "type": "STRING", "mode": "NULLABLE"},
+    {"name": "_metadata_spanner_is_last_record_in_transaction_in_partition", "type": "BOOL", "mode": "NULLABLE"},
+    {"name": "_metadata_spanner_number_of_records_in_transaction", "type": "INT64", "mode": "NULLABLE"},
+    {"name": "_metadata_spanner_number_of_partitions_in_transaction", "type": "INT64", "mode": "NULLABLE"},
+    {"name": "_metadata_big_query_commit_timestamp", "type": "TIMESTAMP", "mode": "NULLABLE"},
+    {"name": "UserId", "type": "STRING", "mode": "NULLABLE"},
+    {"name": "Source", "type": "STRING", "mode": "NULLABLE"},
+    {"name": "TransactionId", "type": "STRING", "mode": "NULLABLE"},
+    {"name": "Processed", "type": "BOOL", "mode": "NULLABLE"}
+  ]
+  

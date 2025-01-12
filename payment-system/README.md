@@ -1992,8 +1992,9 @@ ai-learningharshvardhan@harshvadhansAir terraform %
     --sql="SELECT COUNT(*) AS total_rows FROM payment_audit_trail"
 total_rows
 75
-ai-learningharshvardhan@harshvadhansAir terraform % bq query --nouse_legacy_sql \                  
-"SELECT COUNT(*) AS total_rows FROM \`spanner-gke-443910.audit_service_dataset.payment_audit_trail_changelog\`"
+ai-learningharshvardhan@harshvadhansAir terraform % bq query --nouse_legacy_sql \
+"SELECT COUNT(*) AS total_rows FROM \`spanner-gke-443910.audit_service_dataset.payment_audit_trail_changelog\`;"
+
 +------------+
 | total_rows |
 +------------+
@@ -2147,8 +2148,7 @@ Usecase 3:
 #### Before Scenario:
 
 ```bash
-% bq query --nouse_legacy_sql \
-"SELECT COUNT(*) AS total_rows FROM `spanner-gke-443910.audit_service_dataset.payment_audit_trail_changelog`"
+% bq query --nouse_legacy_sql "SELECT COUNT(*) AS total_rows FROM `spanner-gke-443910.audit_service_datasetpayment_audit_trail_changelog`"
 
 +------------+
 | total_rows |
@@ -2292,10 +2292,993 @@ Output
 total_rows
 115
 
+
 Observation, few of entries missed during this on-fly changes & this is can be handled properly.
 
 
 
 
+####
+
+
+Usecase: A new DB and a diffrent change stream stream to same BQ dataset & table
+
+% gcloud spanner databases execute-sql shared-db \
+    --instance=sample-instance \
+    --project=spanner-gke-443910 \
+    --sql="
+        SELECT
+            t.table_name,
+            c.column_name,
+            c.spanner_type,
+            c.is_nullable
+        FROM
+            information_schema.tables AS t
+        JOIN
+            information_schema.columns AS c
+        ON
+            t.table_name = c.table_name
+        WHERE
+            t.table_schema = ''
+        ORDER BY
+            t.table_name, c.ordinal_position;"
+table_name           column_name  spanner_type  is_nullable
+Payments             PaymentUID   STRING(36)    NO
+Payments             UserId       STRING(100)   YES
+Payments             Amount       FLOAT64       YES
+Payments             Status       STRING(50)    YES
+Payments             Timestamp    TIMESTAMP     YES
+Reconciliation       PUID         STRING(36)    NO
+Reconciliation       Amount       FLOAT64       YES
+Reconciliation       Status       STRING(50)    YES
+Reconciliation       Timestamp    TIMESTAMP     YES
+Transactions         PUID         STRING(36)    NO
+Transactions         UserId       STRING(100)   YES
+Transactions         Amount       FLOAT64       YES
+Transactions         Status       STRING(50)    YES
+Transactions         Timestamp    TIMESTAMP     YES
+payment_audit_trail  PUID         STRING(36)    NO
+payment_audit_trail  Action       STRING(100)   YES
+payment_audit_trail  Status       STRING(50)    YES
+payment_audit_trail  Timestamp    TIMESTAMP     YES
+
+
+
+2) DDL - DB & its table information with change stream enabled
+
+CREATE TABLE Payments (
+  PaymentUID STRING(36) NOT NULL,
+  UserId STRING(100),
+  Amount FLOAT64,
+  Status STRING(50),
+  Timestamp TIMESTAMP,
+) PRIMARY KEY(PaymentUID);
+
+CREATE TABLE Reconciliation (
+  PUID STRING(36) NOT NULL,
+  Amount FLOAT64,
+  Status STRING(50),
+  Timestamp TIMESTAMP,
+) PRIMARY KEY(PUID);
+
+CREATE TABLE Transactions (
+  PUID STRING(36) NOT NULL,
+  UserId STRING(100),
+  Amount FLOAT64,
+  Status STRING(50),
+  Timestamp TIMESTAMP,
+) PRIMARY KEY(PUID);
+
+CREATE TABLE payment_audit_trail (
+  PUID STRING(36) NOT NULL,
+  Action STRING(100),
+  Status STRING(50),
+  Timestamp TIMESTAMP,
+) PRIMARY KEY(PUID);
+
+CREATE CHANGE STREAM shared_audit_db_cs
+  FOR ALL;
+
+
+3) Creating a new ChangeStream job for this DB & change stream with same destination BQ & Table
+
+
+# Job Configuration
+job_name           = "spanner-to-bigquery-shared-db"
+template_gcs_path  = "gs://dataflow-templates-us-central1/2024-12-03-00_RC00/flex/Spanner_Change_Streams_to_BigQuery"
+parameters = 
+  spannerInstanceId          = "sample-instance"
+  spannerDatabase            = "shared-db"
+  spannerMetadataInstanceId  = "sample-instance"
+  spannerMetadataDatabase    = "shared-db"
+  spannerChangeStreamName    = "shared_audit_db_cs"
+  bigQueryDataset            = "audit_service_dataset"
+  bigQueryChangelogTableNameTemplate = "payment_audit_trail_changelog"
+
+
+% gcloud dataflow jobs list --region us-central1
+JOB_ID                                    NAME                           TYPE       CREATION_TIME        STATE      REGION
+2025-01-07_03_47_45-3937567032289522483   spanner-to-bigquery-shared-db  Streaming  2025-01-07 11:47:45  Running    us-central1
+2025-01-06_22_15_17-10964669824617826418  spanner-to-bigquery-qa         Streaming  2025-01-07 06:15:17  Running    us-central1
+2025-01-06_17_11_40-7457857020413206573   spanner-to-bigquery            Streaming  2025-01-07 01:11:42  Running    us-central1
+
+
+
+4) BQ dataset & its current table columns
+
+
+% bq show --format=pretty spanner-gke-443910:audit_service_dataset.payment_audit_trail_changelog
+
+Table spanner-gke-443910:audit_service_dataset.payment_audit_trail_changelog
+
++-----------------+--------------------------------------------------------------------------+------------+-------------+------------+-------------------+------------------+---------------------+----------------------+--------+
+|  Last modified  |                                  Schema                                  | Total Rows | Total Bytes | Expiration | Time Partitioning | Clustered Fields | Total Logical Bytes | Total Physical Bytes | Labels |
++-----------------+--------------------------------------------------------------------------+------------+-------------+------------+-------------------+------------------+---------------------+----------------------+--------+
+| 07 Jan 20:10:43 | |- PUID: string                                                          | 2444       | 500883      |            |                   |                  | 500883              | 106674               |        |
+|                 | |- Action: string                                                        |            |             |            |                   |                  |                     |                      |        |
+|                 | |- Timestamp: timestamp                                                  |            |             |            |                   |                  |                     |                      |        |
+|                 | |- Status: string                                                        |            |             |            |                   |                  |                     |                      |        |
+|                 | |- ServiceName: string                                                   |            |             |            |                   |                  |                     |                      |        |
+|                 | |- Metadata: json                                                        |            |             |            |                   |                  |                     |                      |        |
+|                 | |- RetryCount: integer                                                   |            |             |            |                   |                  |                     |                      |        |
+|                 | |- ErrorDetails: string                                                  |            |             |            |                   |                  |                     |                      |        |
+|                 | |- _metadata_spanner_mod_type: string                                    |            |             |            |                   |                  |                     |                      |        |
+|                 | |- _metadata_spanner_table_name: string                                  |            |             |            |                   |                  |                     |                      |        |
+|                 | |- _metadata_spanner_commit_timestamp: timestamp                         |            |             |            |                   |                  |                     |                      |        |
+|                 | |- _metadata_spanner_server_transaction_id: string                       |            |             |            |                   |                  |                     |                      |        |
+|                 | |- _metadata_spanner_record_sequence: string                             |            |             |            |                   |                  |                     |                      |        |
+|                 | |- _metadata_spanner_is_last_record_in_transaction_in_partition: boolean |            |             |            |                   |                  |                     |                      |        |
+|                 | |- _metadata_spanner_number_of_records_in_transaction: integer           |            |             |            |                   |                  |                     |                      |        |
+|                 | |- _metadata_spanner_number_of_partitions_in_transaction: integer        |            |             |            |                   |                  |                     |                      |        |
+|                 | |- _metadata_big_query_commit_timestamp: timestamp                       |            |             |            |                   |                  |                     |                      |        |
+|                 | |- UserId: string                                                        |            |             |            |                   |                  |                     |                      |        |
+|                 | |- Source: string                                                        |            |             |            |                   |                  |                     |                      |        |
+|                 | |- TransactionId: string                                                 |            |             |            |                   |                  |                     |                      |        |
+|                 | |- Processed: boolean                                                    |            |             |            |                   |                  |                     |                      |        |
++-----------------+--------------------------------------------------------------------------+------------+-------------+------------+-------------------+------------------+---------------------+----------------------+--------+
+
+
+vs
+
+Current Schema for the services:
+
+table_name           column_name  spanner_type  is_nullable
+Payments             PaymentUID   STRING(36)    NO
+Payments             UserId       STRING(100)   YES
+Payments             Amount       FLOAT64       YES
+Payments             Status       STRING(50)    YES
+Payments             Timestamp    TIMESTAMP     YES
+Reconciliation       PUID         STRING(36)    NO
+Reconciliation       Amount       FLOAT64       YES
+Reconciliation       Status       STRING(50)    YES
+Reconciliation       Timestamp    TIMESTAMP     YES
+Transactions         PUID         STRING(36)    NO
+Transactions         UserId       STRING(100)   YES
+Transactions         Amount       FLOAT64       YES
+Transactions         Status       STRING(50)    YES
+Transactions         Timestamp    TIMESTAMP     YES
+payment_audit_trail  PUID         STRING(36)    NO
+payment_audit_trail  Action       STRING(100)   YES
+payment_audit_trail  Status       STRING(50)    YES
+payment_audit_trail  Timestamp    TIMESTAMP     YES
+
+
+###
+
+So, we all the columns in BQ Table.
+
+###
+Before pushing the payload the row count:
+
+% bq query --nouse_legacy_sql \
+"SELECT COUNT(*) AS total_rows FROM \`spanner-gke-443910.audit_service_dataset.payment_audit_trail_changelog\`;"
+
++------------+
+| total_rows |
++------------+
+|       2444 |
++------------+
+
+
+% gcloud spanner databases execute-sql  shared-db --instance=sample-instance  --project=spanner-gke-443910 --sql="SELECT COUNT(*) AS total_rows FROM  Payments"
+total_rows
+9695
+
+% gcloud spanner databases execute-sql  shared-db --instance=sample-instance  --project=spanner-gke-443910 --sql="SELECT COUNT(*) AS total_rows FROM  Reconciliation"
+total_rows
+9524
+
+% gcloud spanner databases execute-sql  shared-db --instance=sample-instance  --project=spanner-gke-443910 --sql="SELECT COUNT(*) AS total_rows FROM  Transactions"  
+total_rows
+9695
+
+
+ % gcloud spanner databases execute-sql  shared-db --instance=sample-instance  --project=spanner-gke-443910 --sql="SELECT COUNT(*) AS total_rows FROM  payment_audit_trail"
+total_rows
+0
+
+
+Issue Summary
+The issue arises when attempting to query metadata or consume data from a Cloud Spanner change stream (shared_audit_db_cs) via SQL. Despite the change stream appearing correctly configured in the Google Cloud Console UI, the SQL queries return no results or raise errors. This inconsistency suggests a possible bug in Cloud Spanner's change stream metadata handling or SQL functionality.
+
+Steps to Reproduce
+Create a Change Stream in Cloud Spanner:
+
+A change stream named shared_audit_db_cs is created and associated with tables (payment_audit_trail, Payments, Reconciliation, Transactions) in the database shared-db.
+Verify Change Stream in UI:
+
+Navigate to the Spanner instance (sample-instance) and database (shared-db) in the Google Cloud Console.
+The shared_audit_db_cs change stream is visible under the Change Streams section, and it correctly lists the associated tables.
+Execute SQL to List Change Streams:
+
+bash
+Copy code
+gcloud spanner databases execute-sql shared-db \
+  --instance=sample-instance \
+  --sql="SELECT CHANGE_STREAM_NAME FROM INFORMATION_SCHEMA.CHANGE_STREAMS;"
+Output: The query returns the change stream shared_audit_db_cs.
+Execute SQL to Retrieve Tables Associated with the Change Stream:
+
+bash
+Copy code
+gcloud spanner databases execute-sql shared-db \
+  --instance=sample-instance \
+  --sql="SELECT TABLE_NAME FROM INFORMATION_SCHEMA.CHANGE_STREAM_TABLES WHERE CHANGE_STREAM_NAME = 'shared_audit_db_cs';"
+Output: No rows are returned, despite the UI showing the associated tables.
+Attempt to Consume Data Using READ_CHANGE_STREAM:
+
+bash
+Copy code
+gcloud spanner databases execute-sql shared-db \
+  --instance=sample-instance \
+  --sql="SELECT * FROM READ_CHANGE_STREAM('shared_audit_db_cs', CURRENT_TIMESTAMP() - INTERVAL 10 MINUTE, CURRENT_TIMESTAMP());"
+Output:
+sql
+Copy code
+ERROR: (gcloud.spanner.databases.execute-sql) INVALID_ARGUMENT: Table-valued function not found: READ_CHANGE_STREAM
+Observed Behavior
+UI Behavior:
+The shared_audit_db_cs change stream appears correctly configured and lists associated tables (payment_audit_trail, Payments, Reconciliation, Transactions).
+SQL Behavior:
+The INFORMATION_SCHEMA.CHANGE_STREAMS query confirms the existence of the change stream.
+The INFORMATION_SCHEMA.CHANGE_STREAM_TABLES query returns no rows, indicating no table associations.
+The READ_CHANGE_STREAM function raises an error (Table-valued function not found), preventing data consumption.
+Expected Behavior
+The query SELECT TABLE_NAME FROM INFORMATION_SCHEMA.CHANGE_STREAM_TABLES WHERE CHANGE_STREAM_NAME = 'shared_audit_db_cs'; should return the associated tables (payment_audit_trail, Payments, Reconciliation, Transactions).
+The READ_CHANGE_STREAM function should return rows if the change stream is capturing changes.
+Implications
+Operational Impact: The inconsistency between the UI and SQL results makes it difficult to validate change stream configurations or consume change data programmatically.
+Suspected Cause: This could be a metadata synchronization issue or a bug in the INFORMATION_SCHEMA or READ_CHANGE_STREAM functionality.
+
+
+
+Issue Summary
+The issue arises when a change stream is created using the FOR ALL option in Cloud Spanner. While the Google Cloud Console UI displays the change stream and its dynamically associated tables, querying the INFORMATION_SCHEMA.CHANGE_STREAM_TABLES view and consuming the change stream using READ_CHANGE_STREAM fail.
+
+Steps to Reproduce
+Create a change stream in the database shared-db using the FOR ALL option:
+sql
+Copy code
+CREATE CHANGE STREAM shared_audit_db_cs FOR ALL;
+Verify the change stream in the Google Cloud Console UI.
+Observed: The UI lists the change stream and shows associated tables (payment_audit_trail, Payments, Reconciliation, Transactions).
+Run the following SQL queries:
+List Change Streams:
+sql
+Copy code
+SELECT CHANGE_STREAM_NAME FROM INFORMATION_SCHEMA.CHANGE_STREAMS;
+Output: shared_audit_db_cs
+List Associated Tables:
+sql
+Copy code
+SELECT TABLE_NAME FROM INFORMATION_SCHEMA.CHANGE_STREAM_TABLES WHERE CHANGE_STREAM_NAME = 'shared_audit_db_cs';
+Output: No rows.
+Consume Change Stream:
+sql
+Copy code
+SELECT * FROM READ_CHANGE_STREAM('shared_audit_db_cs', CURRENT_TIMESTAMP() - INTERVAL 10 MINUTE, CURRENT_TIMESTAMP());
+Output:
+sql
+Copy code
+ERROR: (gcloud.spanner.databases.execute-sql) INVALID_ARGUMENT: Table-valued function not found: READ_CHANGE_STREAM
+Observed Behavior
+The INFORMATION_SCHEMA.CHANGE_STREAM_TABLES view does not list any tables for the shared_audit_db_cs change stream.
+The READ_CHANGE_STREAM function fails with an error, making it impossible to consume changes programmatically.
+The Google Cloud Console UI shows the change stream as watching all tables, consistent with the FOR ALL option.
+Expected Behavior
+The INFORMATION_SCHEMA.CHANGE_STREAM_TABLES view should dynamically reflect all tables being watched by a FOR ALL change stream.
+The READ_CHANGE_STREAM function should allow querying changes for the FOR ALL change stream.
+Possible Cause
+The behavior suggests a potential bug or limitation in Cloud Spanner's handling of FOR ALL change streams:
+
+Metadata inconsistency between the INFORMATION_SCHEMA views and the UI.
+Configuration or compatibility issues with the READ_CHANGE_STREAM function for FOR ALL change streams.
+
+**Issue**
+
+The data is not coming up into the bigquery.
+
+Command to check the logs of dataflow job.
+
+gcloud logging read "resource.type=dataflow_step AND resource.labels.job_id=2025-01-07_05_24_44-13571876371196309811" \
+    --project=spanner-gke-443910 \
+    --format="json" \
+    --limit=21 
+
+
+ % gcloud spanner databases execute-sql shared-db \
+  --instance=sample-instance \
+  --sql="SELECT *
+         FROM READ_CHANGE_STREAM(
+           'shared_audit_db_cs',
+           TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 10 MINUTE),
+           CURRENT_TIMESTAMP()
+         );"
+
+ERROR: (gcloud.spanner.databases.execute-sql) INVALID_ARGUMENT: Table-valued function not found: READ_CHANGE_STREAM [at 2:15]\n         FROM READ_CHANGE_STREAM(\n              ^
+Table-valued function not found: READ_CHANGE_STREAM [at 2:15]
+         FROM READ_CHANGE_STREAM(
+              ^   
+
+####
+
+Its working now
+
+% bq query --nouse_legacy_sql "SELECT COUNT(*) AS total_rows FROM \`spanner-gke-443910.audit_service_dataset.payment_audit_trail_changelog\`"
+
++------------+
+| total_rows |
++------------+
+|       6164 |
++------------+
+ai-learningharshvardhan@harshvadhansAir payment-system % gcloud spanner databases execute-sql shared-db \
+  --instance=sample-instance \
+  --sql="SELECT * FROM test_table LIMIT 10;"
+
+PUID                                  Action          Status   Timestamp                       ServiceName     Metadata                           RetryCount  ErrorDetails
+1                                     InsertAction    Success  2025-01-07T23:49:30.182579123Z  ServiceTest     {"key":"value"}                    1           No error
+119099ca-f106-40e2-83fb-aeadc48c6d3e  CREATE_PAYMENT  SUCCESS  2025-01-08T00:49:04.588023Z     PaymentService  {"amount":100.5,"currency":"USD"}  0
+1234                                  InsertTest      None     2025-01-07T23:52:24.222380897Z
+2                                     UpdateAction    Pending  2025-01-07T23:49:30.182579123Z  AnotherService  None                               0           Retry needed
+22f240c2-b6f4-4959-8f27-b7db304dde31  CREATE_PAYMENT  SUCCESS  2025-01-08T00:48:41.238672Z     PaymentService  {"amount":100.5,"currency":"USD"}  0
+2543bd55-071a-4bca-afc2-a671aac3c4ff  CREATE_PAYMENT  SUCCESS  2025-01-08T00:48:35.44206Z      PaymentService  {"amount":100.5,"currency":"USD"}  0
+42094c9d-f279-4a6f-930d-0ce2695ce7a2  CREATE_PAYMENT  SUCCESS  2025-01-08T00:48:52.945627Z     PaymentService  {"amount":100.5,"currency":"USD"}  0
+45f6543e-298f-4c75-9771-26f1ccfeb726  CREATE_PAYMENT  SUCCESS  2025-01-08T00:48:58.702891Z     PaymentService  {"amount":100.5,"currency":"USD"}  0
+6953ee71-a880-4071-9b3b-18a605eea916  CREATE_PAYMENT  SUCCESS  2025-01-08T00:48:17.177393Z     PaymentService  {"amount":100.5,"currency":"USD"}  0
+7655f33a-21af-4c3a-b730-f2382be0e329  CREATE_PAYMENT  SUCCESS  2025-01-08T00:49:10.46284Z      PaymentService  {"amount":100.5,"currency":"USD"}  0
+ai-learningharshvardhan@harshvadhansAir payment-system % 
+ai-learningharshvardhan@harshvadhansAir payment-system % 
+ai-learningharshvardhan@harshvadhansAir payment-system % 
+ai-learningharshvardhan@harshvadhansAir payment-system % bq query --nouse_legacy_sql \
+  "SELECT * FROM spanner-gke-443910.audit_service_dataset.payment_audit_trail_changelog \
+   ORDER BY Timestamp DESC LIMIT 10;"
+
++--------------------------------------+----------------+---------------------+---------+----------------+-----------------------------------+------------+--------------+----------------------------+------------------------------+------------------------------------+-----------------------------------------+-----------------------------------+--------------------------------------------------------------+----------------------------------------------------+-------------------------------------------------------+--------------------------------------+--------+--------+---------------+-----------+
+|                 PUID                 |     Action     |      Timestamp      | Status  |  ServiceName   |             Metadata              | RetryCount | ErrorDetails | _metadata_spanner_mod_type | _metadata_spanner_table_name | _metadata_spanner_commit_timestamp | _metadata_spanner_server_transaction_id | _metadata_spanner_record_sequence | _metadata_spanner_is_last_record_in_transaction_in_partition | _metadata_spanner_number_of_records_in_transaction | _metadata_spanner_number_of_partitions_in_transaction | _metadata_big_query_commit_timestamp | UserId | Source | TransactionId | Processed |
++--------------------------------------+----------------+---------------------+---------+----------------+-----------------------------------+------------+--------------+----------------------------+------------------------------+------------------------------------+-----------------------------------------+-----------------------------------+--------------------------------------------------------------+----------------------------------------------------+-------------------------------------------------------+--------------------------------------+--------+--------+---------------+-----------+
+| fac161cf-a544-4471-96e6-b6883b08a839 | CREATE_PAYMENT | 2025-01-08 00:49:16 | SUCCESS | PaymentService | {"amount":100.5,"currency":"USD"} |          0 | NULL         | INSERT                     | test_table                   |                2025-01-08 00:49:16 | MjAxMDU2MjkzMjkwNjUzODU0OQ==            | 00000000                          |                                                         true |                                                  1 |                                                     1 |                  2025-01-08 00:49:23 | NULL   | NULL   | NULL          |      NULL |
+| 7655f33a-21af-4c3a-b730-f2382be0e329 | CREATE_PAYMENT | 2025-01-08 00:49:10 | SUCCESS | PaymentService | {"amount":100.5,"currency":"USD"} |          0 | NULL         | INSERT                     | test_table                   |                2025-01-08 00:49:10 | MTgzMzE4NjUzMjc4MDY4NzQwOTI=            | 00000000                          |                                                         true |                                                  1 |                                                     1 |                  2025-01-08 00:49:15 | NULL   | NULL   | NULL          |      NULL |
+| 119099ca-f106-40e2-83fb-aeadc48c6d3e | CREATE_PAYMENT | 2025-01-08 00:49:04 | SUCCESS | PaymentService | {"amount":100.5,"currency":"USD"} |          0 | NULL         | INSERT                     | test_table                   |                2025-01-08 00:49:05 | OTA1NTI4MTUxNjE0NDcwMDIwNA==            | 00000000                          |                                                         true |                                                  1 |                                                     1 |                  2025-01-08 00:49:09 | NULL   | NULL   | NULL          |      NULL |
+| 45f6543e-298f-4c75-9771-26f1ccfeb726 | CREATE_PAYMENT | 2025-01-08 00:48:58 | SUCCESS | PaymentService | {"amount":100.5,"currency":"USD"} |          0 | NULL         | INSERT                     | test_table                   |                2025-01-08 00:48:59 | MTgzMjcwNzM5MTE3ODA3NjI4Mzc=            | 00000000                          |                                                         true |                                                  1 |                                                     1 |                  2025-01-08 00:49:03 | NULL   | NULL   | NULL          |      NULL |
+| 42094c9d-f279-4a6f-930d-0ce2695ce7a2 | CREATE_PAYMENT | 2025-01-08 00:48:52 | SUCCESS | PaymentService | {"amount":100.5,"currency":"USD"} |          0 | NULL         | INSERT                     | test_table                   |                2025-01-08 00:48:53 | MTA3NDcyODk3MzM2ODc2ODgzMDc=            | 00000000                          |                                                         true |                                                  1 |                                                     1 |                  2025-01-08 00:48:57 | NULL   | NULL   | NULL          |      NULL |
+| fc6bdbee-e9ef-4384-8135-abc455e71d9b | CREATE_PAYMENT | 2025-01-08 00:48:47 | SUCCESS | PaymentService | {"amount":100.5,"currency":"USD"} |          0 | NULL         | INSERT                     | test_table                   |                2025-01-08 00:48:47 | MTExMDUyNzk3OTk5NzQ3MDIwMzE=            | 00000000                          |                                                         true |                                                  1 |                                                     1 |                  2025-01-08 00:48:51 | NULL   | NULL   | NULL          |      NULL |
+| 22f240c2-b6f4-4959-8f27-b7db304dde31 | CREATE_PAYMENT | 2025-01-08 00:48:41 | SUCCESS | PaymentService | {"amount":100.5,"currency":"USD"} |          0 | NULL         | INSERT                     | test_table                   |                2025-01-08 00:48:41 | ODE1NjE0Mzc0OTE0NzYwNTY3MA==            | 00000000                          |                                                         true |                                                  1 |                                                     1 |                  2025-01-08 00:48:44 | NULL   | NULL   | NULL          |      NULL |
+| 2543bd55-071a-4bca-afc2-a671aac3c4ff | CREATE_PAYMENT | 2025-01-08 00:48:35 | SUCCESS | PaymentService | {"amount":100.5,"currency":"USD"} |          0 | NULL         | INSERT                     | test_table                   |                2025-01-08 00:48:35 | MTE4MjAwNDYwMDg0NjY0NTg4MjQ=            | 00000000                          |                                                         true |                                                  1 |                                                     1 |                  2025-01-08 00:48:44 | NULL   | NULL   | NULL          |      NULL |
+| fbfcc060-4b1f-484d-9ac1-9993ba3a3a7b | CREATE_PAYMENT | 2025-01-08 00:48:29 | SUCCESS | PaymentService | {"amount":100.5,"currency":"USD"} |          0 | NULL         | INSERT                     | test_table                   |                2025-01-08 00:48:30 | NDE4MDgzMjY1OTgwODExMTEz                | 00000000                          |                                                         true |                                                  1 |                                                     1 |                  2025-01-08 00:48:36 | NULL   | NULL   | NULL          |      NULL |
+| d35b6718-f13d-4d16-87b7-df9e8edafbd3 | CREATE_PAYMENT | 2025-01-08 00:48:24 | SUCCESS | PaymentService | {"amount":100.5,"currency":"USD"} |          0 | NULL         | INSERT                     | test_table                   |                2025-01-08 00:48:24 | MTY1OTY0MjQyNjAxNzAzODEwODc=            | 00000000                          |                                                         true |                                                  1 |                                                     1 |                  2025-01-08 00:48:30 | NULL   | NULL   | NULL          |      NULL |
++--------------------------------------+----------------+---------------------+---------+----------------+-----------------------------------+------------+--------------+----------------------------+------------------------------+------------------------------------+-----------------------------------------+-----------------------------------+--------------------------------------------------------------+----------------------------------------------------+-------------------------------------------------------+--------------------------------------+--------+--------+---------------+-----------+
+ai-learningharshvardhan@harshvadhansAir payment-system % 
+ai-learningharshvardhan@harshvadhansAir payment-system % bq query --nouse_legacy_sql \
+  "SELECT * FROM spanner-gke-443910.audit_service_dataset.showcase_log \
+   ORDER BY log_time DESC LIMIT 10;"
+
++---------------------+----------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|      log_time       |  source  |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              log_details                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
++---------------------+----------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| 2025-01-08 00:49:16 | BigQuery | New row: {'PUID': '7655f33a-21af-4c3a-b730-f2382be0e329', 'Action': 'CREATE_PAYMENT', 'Timestamp': datetime.datetime(2025, 1, 8, 0, 49, 10, 462840, tzinfo=datetime.timezone.utc), 'Status': 'SUCCESS', 'ServiceName': 'PaymentService', 'Metadata': {'amount': 100.5, 'currency': 'USD'}, 'RetryCount': 0, 'ErrorDetails': None, '_metadata_spanner_mod_type': 'INSERT', '_metadata_spanner_table_name': 'test_table', '_metadata_spanner_commit_timestamp': datetime.datetime(2025, 1, 8, 0, 49, 10, 914767, tzinfo=datetime.timezone.utc), '_metadata_spanner_server_transaction_id': 'MTgzMzE4NjUzMjc4MDY4NzQwOTI=', '_metadata_spanner_record_sequence': '00000000', '_metadata_spanner_is_last_record_in_transaction_in_partition': True, '_metadata_spanner_number_of_records_in_transaction': 1, '_metadata_spanner_number_of_partitions_in_transaction': 1, '_metadata_big_query_commit_timestamp': datetime.datetime(2025, 1, 8, 0, 49, 15, 168786, tzinfo=datetime.timezone.utc), 'UserId': None, 'Source': None, 'TransactionId': None, 'Processed': None} |
+| 2025-01-08 00:49:16 | Spanner  | Inserted record: {'PUID': 'fac161cf-a544-4471-96e6-b6883b08a839', 'Action': 'CREATE_PAYMENT', 'Status': 'SUCCESS', 'Timestamp': datetime.datetime(2025, 1, 8, 0, 49, 16, 254435, tzinfo=datetime.timezone.utc), 'ServiceName': 'PaymentService', 'Metadata': '{"amount": 100.50, "currency": "USD"}', 'RetryCount': 0, 'ErrorDetails': None}                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| 2025-01-08 00:49:16 | BigQuery | New row: {'PUID': '119099ca-f106-40e2-83fb-aeadc48c6d3e', 'Action': 'CREATE_PAYMENT', 'Timestamp': datetime.datetime(2025, 1, 8, 0, 49, 4, 588023, tzinfo=datetime.timezone.utc), 'Status': 'SUCCESS', 'ServiceName': 'PaymentService', 'Metadata': {'amount': 100.5, 'currency': 'USD'}, 'RetryCount': 0, 'ErrorDetails': None, '_metadata_spanner_mod_type': 'INSERT', '_metadata_spanner_table_name': 'test_table', '_metadata_spanner_commit_timestamp': datetime.datetime(2025, 1, 8, 0, 49, 5, 56111, tzinfo=datetime.timezone.utc), '_metadata_spanner_server_transaction_id': 'OTA1NTI4MTUxNjE0NDcwMDIwNA==', '_metadata_spanner_record_sequence': '00000000', '_metadata_spanner_is_last_record_in_transaction_in_partition': True, '_metadata_spanner_number_of_records_in_transaction': 1, '_metadata_spanner_number_of_partitions_in_transaction': 1, '_metadata_big_query_commit_timestamp': datetime.datetime(2025, 1, 8, 0, 49, 9, 449725, tzinfo=datetime.timezone.utc), 'UserId': None, 'Source': None, 'TransactionId': None, 'Processed': None}     |
+| 2025-01-08 00:49:10 | Spanner  | Inserted record: {'PUID': '7655f33a-21af-4c3a-b730-f2382be0e329', 'Action': 'CREATE_PAYMENT', 'Status': 'SUCCESS', 'Timestamp': datetime.datetime(2025, 1, 8, 0, 49, 10, 462840, tzinfo=datetime.timezone.utc), 'ServiceName': 'PaymentService', 'Metadata': '{"amount": 100.50, "currency": "USD"}', 'RetryCount': 0, 'ErrorDetails': None}                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| 2025-01-08 00:49:10 | BigQuery | New row: {'PUID': '45f6543e-298f-4c75-9771-26f1ccfeb726', 'Action': 'CREATE_PAYMENT', 'Timestamp': datetime.datetime(2025, 1, 8, 0, 48, 58, 702891, tzinfo=datetime.timezone.utc), 'Status': 'SUCCESS', 'ServiceName': 'PaymentService', 'Metadata': {'amount': 100.5, 'currency': 'USD'}, 'RetryCount': 0, 'ErrorDetails': None, '_metadata_spanner_mod_type': 'INSERT', '_metadata_spanner_table_name': 'test_table', '_metadata_spanner_commit_timestamp': datetime.datetime(2025, 1, 8, 0, 48, 59, 143983, tzinfo=datetime.timezone.utc), '_metadata_spanner_server_transaction_id': 'MTgzMjcwNzM5MTE3ODA3NjI4Mzc=', '_metadata_spanner_record_sequence': '00000000', '_metadata_spanner_is_last_record_in_transaction_in_partition': True, '_metadata_spanner_number_of_records_in_transaction': 1, '_metadata_spanner_number_of_partitions_in_transaction': 1, '_metadata_big_query_commit_timestamp': datetime.datetime(2025, 1, 8, 0, 49, 3, 486262, tzinfo=datetime.timezone.utc), 'UserId': None, 'Source': None, 'TransactionId': None, 'Processed': None}  |
+| 2025-01-08 00:49:05 | Spanner  | Inserted record: {'PUID': '119099ca-f106-40e2-83fb-aeadc48c6d3e', 'Action': 'CREATE_PAYMENT', 'Status': 'SUCCESS', 'Timestamp': datetime.datetime(2025, 1, 8, 0, 49, 4, 588023, tzinfo=datetime.timezone.utc), 'ServiceName': 'PaymentService', 'Metadata': '{"amount": 100.50, "currency": "USD"}', 'RetryCount': 0, 'ErrorDetails': None}                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| 2025-01-08 00:49:03 | BigQuery | New row: {'PUID': '42094c9d-f279-4a6f-930d-0ce2695ce7a2', 'Action': 'CREATE_PAYMENT', 'Timestamp': datetime.datetime(2025, 1, 8, 0, 48, 52, 945627, tzinfo=datetime.timezone.utc), 'Status': 'SUCCESS', 'ServiceName': 'PaymentService', 'Metadata': {'amount': 100.5, 'currency': 'USD'}, 'RetryCount': 0, 'ErrorDetails': None, '_metadata_spanner_mod_type': 'INSERT', '_metadata_spanner_table_name': 'test_table', '_metadata_spanner_commit_timestamp': datetime.datetime(2025, 1, 8, 0, 48, 53, 427135, tzinfo=datetime.timezone.utc), '_metadata_spanner_server_transaction_id': 'MTA3NDcyODk3MzM2ODc2ODgzMDc=', '_metadata_spanner_record_sequence': '00000000', '_metadata_spanner_is_last_record_in_transaction_in_partition': True, '_metadata_spanner_number_of_records_in_transaction': 1, '_metadata_spanner_number_of_partitions_in_transaction': 1, '_metadata_big_query_commit_timestamp': datetime.datetime(2025, 1, 8, 0, 48, 57, 750561, tzinfo=datetime.timezone.utc), 'UserId': None, 'Source': None, 'TransactionId': None, 'Processed': None} |
+| 2025-01-08 00:48:59 | Spanner  | Inserted record: {'PUID': '45f6543e-298f-4c75-9771-26f1ccfeb726', 'Action': 'CREATE_PAYMENT', 'Status': 'SUCCESS', 'Timestamp': datetime.datetime(2025, 1, 8, 0, 48, 58, 702891, tzinfo=datetime.timezone.utc), 'ServiceName': 'PaymentService', 'Metadata': '{"amount": 100.50, "currency": "USD"}', 'RetryCount': 0, 'ErrorDetails': None}                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| 2025-01-08 00:48:57 | BigQuery | New row: {'PUID': 'fc6bdbee-e9ef-4384-8135-abc455e71d9b', 'Action': 'CREATE_PAYMENT', 'Timestamp': datetime.datetime(2025, 1, 8, 0, 48, 47, 102520, tzinfo=datetime.timezone.utc), 'Status': 'SUCCESS', 'ServiceName': 'PaymentService', 'Metadata': {'amount': 100.5, 'currency': 'USD'}, 'RetryCount': 0, 'ErrorDetails': None, '_metadata_spanner_mod_type': 'INSERT', '_metadata_spanner_table_name': 'test_table', '_metadata_spanner_commit_timestamp': datetime.datetime(2025, 1, 8, 0, 48, 47, 545855, tzinfo=datetime.timezone.utc), '_metadata_spanner_server_transaction_id': 'MTExMDUyNzk3OTk5NzQ3MDIwMzE=', '_metadata_spanner_record_sequence': '00000000', '_metadata_spanner_is_last_record_in_transaction_in_partition': True, '_metadata_spanner_number_of_records_in_transaction': 1, '_metadata_spanner_number_of_partitions_in_transaction': 1, '_metadata_big_query_commit_timestamp': datetime.datetime(2025, 1, 8, 0, 48, 51, 860739, tzinfo=datetime.timezone.utc), 'UserId': None, 'Source': None, 'TransactionId': None, 'Processed': None} |
+| 2025-01-08 00:48:53 | Spanner  | Inserted record: {'PUID': '42094c9d-f279-4a6f-930d-0ce2695ce7a2', 'Action': 'CREATE_PAYMENT', 'Status': 'SUCCESS', 'Timestamp': datetime.datetime(2025, 1, 8, 0, 48, 52, 945627, tzinfo=datetime.timezone.utc), 'ServiceName': 'PaymentService', 'Metadata': '{"amount": 100.50, "currency": "USD"}', 'RetryCount': 0, 'ErrorDetails': None}                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
++---------------------+----------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+ai-learningharshvardhan@harshvadhansAir payment-system % 
+
+
+####
+
+
+ % gcloud spanner databases ddl update shared-db \
+  --instance=sample-instance \
+  --ddl="ALTER TABLE Payments ADD COLUMN Action STRING(100);"
+
+gcloud spanner databases ddl update shared-db \
+  --instance=sample-instance \
+  --ddl="ALTER TABLE Payments ADD COLUMN Metadata JSON;"
+
+gcloud spanner databases ddl update shared-db \
+  --instance=sample-instance \
+  --ddl="ALTER TABLE Payments ADD COLUMN RetryCount INT64;"
+
+gcloud spanner databases ddl update shared-db \
+  --instance=sample-instance \
+  --ddl="ALTER TABLE Payments ADD COLUMN ErrorDetails STRING(500);"
+
+gcloud spanner databases ddl update shared-db \
+  --instance=sample-instance \
+  --ddl="ALTER TABLE Payments ALTER COLUMN Timestamp SET NOT NULL;"
+
+gcloud spanner databases ddl update shared-db \
+  --instance=sample-instance \
+  --ddl="ALTER TABLE Payments ALTER COLUMN PaymentUID SET NOT NULL;"
+
+Schema updating...done.                                                                                                                                     
+Schema updating...done.                                                                                                                                     
+Schema updating...done.                                                                                                                                     
+Schema updating...done.                                                                                                                                     
+ERROR: (gcloud.spanner.databases.ddl.update) INVALID_ARGUMENT: Error parsing Spanner DDL statement: ALTER TABLE Payments ALTER COLUMN Timestamp SET NOT NULL : SET NOT NULL not supported without column type.
+ERROR: (gcloud.spanner.databases.ddl.update) INVALID_ARGUMENT: Error parsing Spanner DDL statement: ALTER TABLE Payments ALTER COLUMN PaymentUID SET NOT NULL : SET NOT NULL not supported without column type.
+ai-learningharshvardhan@harshvadhansAir payment-system % gcloud spanner databases ddl update shared-db \
+  --instance=sample-instance \
+  --ddl="ALTER TABLE Payments ALTER COLUMN Timestamp TIMESTAMP NOT NULL;"
+
+gcloud spanner databases ddl update shared-db \
+  --instance=sample-instance \
+  --ddl="ALTER TABLE Payments ALTER COLUMN PaymentUID STRING(36) NOT NULL;"
+
+Schema updating...done.                                                                                                                                     
+Schema updating...done.                                                                                                                                     
+ai-learningharshvardhan@harshvadhansAir payment-system % 
+
+
+gcloud spanner databases ddl update shared-db \
+  --instance=sample-instance \
+  --ddl="ALTER TABLE Transactions ADD COLUMN Action STRING(100);"
+
+gcloud spanner databases ddl update shared-db \
+  --instance=sample-instance \
+  --ddl="ALTER TABLE Transactions ADD COLUMN Metadata JSON;"
+
+gcloud spanner databases ddl update shared-db \
+  --instance=sample-instance \
+  --ddl="ALTER TABLE Transactions ADD COLUMN RetryCount INT64;"
+
+gcloud spanner databases ddl update shared-db \
+  --instance=sample-instance \
+  --ddl="ALTER TABLE Transactions ADD COLUMN ErrorDetails STRING(500);"
+
+gcloud spanner databases ddl update shared-db \
+  --instance=sample-instance \
+  --ddl="ALTER TABLE Transactions ALTER COLUMN Timestamp TIMESTAMP NOT NULL;"
+
+gcloud spanner databases ddl update shared-db \
+  --instance=sample-instance \
+  --ddl="ALTER TABLE Transactions ALTER COLUMN PUID STRING(36) NOT NULL;"
+
+###
+
+
+IMPORTANT:
+
+I delete the changestream on fly and re-created & below is the error
+
+The error indicates that the partition_token used by the Dataflow job is invalid because it belongs to a previous version of the change stream (shared_audit_db_cs). This situation occurs when a change stream is dropped and recreated, as the old tokens become invalid.
+
+To resolve the issue:
+
+Steps to Fix the Issue
+Stop and Restart the Dataflow Job:
+
+Terminate the existing Dataflow job consuming the old partition_token.
+Start a new Dataflow job to ensure it fetches fresh partition tokens from the newly created change stream.
+Ensure Partition Tokens Are Refreshed:
+
+By restarting the Dataflow job, it will query the Spanner change stream without the stale partition_token and obtain valid tokens for the new change stream.
+
+resolve the issue with stale partition_token apart from deleting and recreating the Dataflow job. This is because the partition_token is directly tied to the previous change stream configuration, which is no longer valid after the change stream was recreated.
+
+Here’s why this is the only solution:
+
+Tokens Are Specific to a Change Stream:
+
+When a change stream is created, it generates unique partition_tokens for its configuration.
+If the change stream is dropped and recreated, the tokens from the previous configuration become invalid.
+Dataflow Job Can't Reuse Old Tokens:
+
+The Dataflow job uses the partition_token to know which partitions to read from.
+Since the tokens no longer belong to a valid change stream, the job cannot function with the stale tokens.
+Force Refreshing Tokens Is Not Supported:
+
+There’s no option to manually refresh tokens for an existing Dataflow job without restarting it.
+
+
+
+#############
+
+Testing Plan for Change Stream Monitoring
+Objective:
+The goal is to validate the following:
+
+Change Stream Behavior:
+Ensure the change stream captures changes from a newly added table and streams the data into BigQuery.
+Schema Compatibility:
+Test how schema changes (adding/removing columns) in the source Spanner table affect the dataflow into BigQuery.
+Data Consistency:
+Confirm that data is streamed correctly under different schema configurations, and changes are reflected accurately in the BigQuery destination table.
+Use Case Scenarios:
+A new table is added to the Spanner database.
+Data is pushed into the new table with the default schema.
+The schema of the table is modified (adding a column).
+Data is pushed with the modified schema.
+The schema of the table is further modified (removing a column).
+Data is pushed with the reduced schema.
+
+
+
+Step 1: Add a New Table
+Create a new table in Spanner (test_monitoring_table) with a schema identical to an existing table (test_table) that is working well with the current change stream.
+
+gcloud spanner databases ddl update shared-db \
+  --instance=sample-instance \
+  --ddl="CREATE TABLE test_monitoring_table (
+      PUID STRING(36) NOT NULL,
+      Action STRING(100) NOT NULL,
+      Status STRING(50),
+      Timestamp TIMESTAMP NOT NULL,
+      ServiceName STRING(100),
+      Metadata JSON,
+      RetryCount INT64,
+      ErrorDetails STRING(500)
+    ) PRIMARY KEY (PUID);"
+
+
+### Data published to DB & same updated in the BQ
+
+ % python3 /Users/harshvardhan/Desktop/spanner-gke/gcp-npp/testing/end-to-end-testing.py
+Starting Spanner and BigQuery demonstration...
+Monitoring BigQuery table for real-time updates...
+Polling BigQuery at 2025-01-08T05:21:53.984553+00:00...
+[2025-01-08T05:22:01.989913+00:00] Logged to BigQuery: Spanner - Inserted record: {'PUID': 'cea13dbe-3322-4d91-bfa3-d26c88683325', 'Action': 'CREATE_PAYMENT', 'Status': 'SUCCESS', 'Timestamp': datetime.datetime(2025, 1, 8, 5, 22, 1, 235688, tzinfo=datetime.timezone.utc), 'ServiceName': 'Test-service', 'Metadata': '{"amount": 100.50, "currency": "USD"}', 'RetryCount': 0, 'ErrorDetails': None}
+Inserted record into Spanner: {'PUID': 'cea13dbe-3322-4d91-bfa3-d26c88683325', 'Action': 'CREATE_PAYMENT', 'Status': 'SUCCESS', 'Timestamp': datetime.datetime(2025, 1, 8, 5, 22, 1, 235688, tzinfo=datetime.timezone.utc), 'ServiceName': 'Test-service', 'Metadata': '{"amount": 100.50, "currency": "USD"}', 'RetryCount': 0, 'ErrorDetails': None}
+Polling BigQuery at 2025-01-08T05:22:06.781764+00:00...
+[2025-01-08T05:22:07.625892+00:00] Logged to BigQuery: Spanner - Inserted record: {'PUID': 'ee8521de-1343-4a5d-9eb4-8b8dd59f5f25', 'Action': 'CREATE_PAYMENT', 'Status': 'SUCCESS', 'Timestamp': datetime.datetime(2025, 1, 8, 5, 22, 6, 994517, tzinfo=datetime.timezone.utc), 'ServiceName': 'Test-service', 'Metadata': '{"amount": 100.50, "currency": "USD"}', 'RetryCount': 0, 'ErrorDetails': None}'_metadata_spanner_is_last_record_in_transaction_in_partition': True, '_metadata_spanner_number_of_records_in_transaction': 1, '_metadata_spanner_number_of_partitions_in_transaction': 1, '_metadata_big_query_commit_timestamp': datetime.datetime(2025, 1, 8, 5, 18, 8, 287326, tzinfo=datetime.timezone.utc), 'UserId': None, 'Source': None, 'TransactionId': None, 'Processed': None}
+
+'
+% bq query --use_legacy_sql=false \
+"SELECT *
+ FROM \`spanner-gke-443910.audit_service_dataset.payment_audit_trail_changelog\`
+ WHERE PUID = 'ee8521de-1343-4a5d-9eb4-8b8dd59f5f25'"
+
++--------------------------------------+----------------+---------------------+---------+--------------+-----------------------------------+------------+--------------+----------------------------+------------------------------+------------------------------------+-----------------------------------------+-----------------------------------+--------------------------------------------------------------+----------------------------------------------------+-------------------------------------------------------+--------------------------------------+--------+--------+---------------+-----------+
+|                 PUID                 |     Action     |      Timestamp      | Status  | ServiceName  |             Metadata              | RetryCount | ErrorDetails | _metadata_spanner_mod_type | _metadata_spanner_table_name | _metadata_spanner_commit_timestamp | _metadata_spanner_server_transaction_id | _metadata_spanner_record_sequence | _metadata_spanner_is_last_record_in_transaction_in_partition | _metadata_spanner_number_of_records_in_transaction | _metadata_spanner_number_of_partitions_in_transaction | _metadata_big_query_commit_timestamp | UserId | Source | TransactionId | Processed |
++--------------------------------------+----------------+---------------------+---------+--------------+-----------------------------------+------------+--------------+----------------------------+------------------------------+------------------------------------+-----------------------------------------+-----------------------------------+--------------------------------------------------------------+----------------------------------------------------+-------------------------------------------------------+--------------------------------------+--------+--------+---------------+-----------+
+| ee8521de-1343-4a5d-9eb4-8b8dd59f5f25 | CREATE_PAYMENT | 2025-01-08 05:22:06 | SUCCESS | Test-service | {"amount":100.5,"currency":"USD"} |          0 | NULL         | INSERT                     | test_monitoring_table        |                2025-01-08 05:22:07 | Mzk2ODY1NTk3MTkwMzkzODIzNA==            | 00000000                          |                                                         true |                                                  1 |                                                     1 |                  2025-01-08 05:22:13 | NULL   | NULL   | NULL          |      NULL |
++--------------------------------------+----------------+---------------------+---------+--------------+-----------------------------------+------------+--------------+----------------------------+------------------------------+------------------------------------+-----------------------------------------+-----------------------------------+--------------------------------------------------------------+----------------------------------------------------+-------------------------------------------------------+--------------------------------------+--------+--------+---------------+-----------+
+ai-learningharshvardhan@harshvadhansAir payment-system % 
+
+
+
+######
+
+Next Step: Adding a new column to table `test_monitoring_table` & this is not there in BQ table:
+
+gcloud spanner databases ddl update shared-db \
+  --instance=sample-instance \
+  --ddl="ALTER TABLE test_monitoring_table ADD COLUMN DataSource STRING(100);"
+
+Verify Schema Update:
+
+ % gcloud spanner databases execute-sql shared-db \
+  --instance=sample-instance \
+  --sql="SELECT COLUMN_NAME, SPANNER_TYPE, IS_NULLABLE
+         FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_NAME = 'test_monitoring_table';"
+
+COLUMN_NAME   SPANNER_TYPE  IS_NULLABLE
+PUID          STRING(36)    NO
+Action        STRING(100)   NO
+Status        STRING(50)    YES
+Timestamp     TIMESTAMP     NO
+ServiceName   STRING(100)   YES
+Metadata      JSON          YES
+RetryCount    INT64         YES
+ErrorDetails  STRING(500)   YES
+DataSource    STRING(100)   YES
+
+
+Important: Before Inserting new data, supporting same schema, Streaming working fine:
+
+  sample_data = {
+            "PUID": str(uuid.uuid4()),
+            "Action": "CREATE_PAYMENT",
+            "Status": "SUCCESS",
+            "Timestamp": datetime.now(timezone.utc),
+            "ServiceName": "Test-service",
+            "Metadata": '{"amount": 100.50, "currency": "USD"}',
+            "RetryCount": 0,
+            "ErrorDetails": None,
+        }
+
+SECNERIO -2 
+
+Important: Lets add data with new column & see the result:
+
+Result: As we see, data is not getting writtern to BQ table with:
+
+
+Inserted record into Spanner: {'PUID': 'fdbf4870-fd4c-464f-a5fc-9f6e48c8a8fc', 'Action': 'CREATE_PAYMENT', 'Status': 'SUCCESS', 'Timestamp': datetime.datetime(2025, 1, 8, 5, 43, 35, 317837, tzinfo=datetime.timezone.utc), 'ServiceName': 'Test-service', 'DataSource': 'InderBank', 'Metadata': '{"amount": 100.50, "currency": "USD"}', 'RetryCount': 0, 'ErrorDetails': None}
+No new rows found at 2025-01-08T05:43:36.111413+00:00.
+Polling BigQuery at 2025-01-08T05:43:41.111658+00:00...
+
+ bq query --nouse_legacy_sql "SELECT COUNT(*) AS total_rows FROM \`spanner-gke-443910.audit_service_dataset.payment_audit_trail_changelog\`"                                
+  
++------------+
+| total_rows |
++------------+
+|       6267 |
++------------+
+
+% python3 /Users/harshvardhan/Desktop/spanner-gke/gcp-npp/testing/end-to-end-testing.py
+Starting Spanner and BigQuery demonstration...
+Monitoring BigQuery table for real-time updates...
+Polling BigQuery at 2025-01-08T05:43:28.214726+00:00...
+No new rows found at 2025-01-08T05:43:29.994612+00:00.
+[2025-01-08T05:43:30.316452+00:00] Logged to BigQuery: Spanner - Inserted record: {'PUID': '1bedf503-a22c-4e9e-a4ba-ff3a3dbb0ba0', 'Action': 'CREATE_PAYMENT', 'Status': 'SUCCESS', 'Timestamp': datetime.datetime(2025, 1, 8, 5, 43, 28, 214008, tzinfo=datetime.timezone.utc), 'ServiceName': 'Test-service', 'DataSource': 'InderBank', 'Metadata': '{"amount": 100.50, "currency": "USD"}', 'RetryCount': 0, 'ErrorDetails': None}
+Inserted record into Spanner: {'PUID': '1bedf503-a22c-4e9e-a4ba-ff3a3dbb0ba0', 'Action': 'CREATE_PAYMENT', 'Status': 'SUCCESS', 'Timestamp': datetime.datetime(2025, 1, 8, 5, 43, 28, 214008, tzinfo=datetime.timezone.utc), 'ServiceName': 'Test-service', 'DataSource': 'InderBank', 'Metadata': '{"amount": 100.50, "currency": "USD"}', 'RetryCount': 0, 'ErrorDetails': None}
+Polling BigQuery at 2025-01-08T05:43:34.999433+00:00...
+[2025-01-08T05:43:35.976446+00:00] Logged to BigQuery: Spanner - Inserted record: {'PUID': 'fdbf4870-fd4c-464f-a5fc-9f6e48c8a8fc', 'Action': 'CREATE_PAYMENT', 'Status': 'SUCCESS', 'Timestamp': datetime.datetime(2025, 1, 8, 5, 43, 35, 317837, tzinfo=datetime.timezone.utc), 'ServiceName': 'Test-service', 'DataSource': 'InderBank', 'Metadata': '{"amount": 100.50, "currency": "USD"}', 'RetryCount': 0, 'ErrorDetails': None}
+Inserted record into Spanner: {'PUID': 'fdbf4870-fd4c-464f-a5fc-9f6e48c8a8fc', 'Action': 'CREATE_PAYMENT', 'Status': 'SUCCESS', 'Timestamp': datetime.datetime(2025, 1, 8, 5, 43, 35, 317837, tzinfo=datetime.timezone.utc), 'ServiceName': 'Test-service', 'DataSource': 'InderBank', 'Metadata': '{"amount": 100.50, "currency": "USD"}', 'RetryCount': 0, 'ErrorDetails': None}
+No new rows found at 2025-01-08T05:43:36.111413+00:00.
+Polling BigQuery at 2025-01-08T05:43:41.111658+00:00...
+[2025-01-08T05:43:41.645271+00:00] Logged to BigQuery: Spanner - Inserted record: {'PUID': '46ca103d-5c9f-49a1-93bf-0b8c25a6d060', 'Action': 'CREATE_PAYMENT', 'Status': 'SUCCESS', 'Timestamp': datetime.datetime(2025, 1, 8, 5, 43, 40, 981583, tzinfo=datetime.timezone.utc), 'ServiceName': 'Test-service', 'DataSource': 'InderBank', 'Metadata': '{"amount": 100.50, "currency": "USD"}', 'RetryCount': 0, 'ErrorDetails': None}
+Inserted record into Spanner: {'PUID': '46ca103d-5c9f-49a1-93bf-0b8c25a6d060', 'Action': 'CREATE_PAYMENT', 'Status': 'SUCCESS', 'Timestamp': datetime.datetime(2025, 1, 8, 5, 43, 40, 981583, tzinfo=datetime.timezone.utc), 'ServiceName': 'Test-service', 'DataSource': 'InderBank', 'Metadata': '{"amount": 100.50, "currency": "USD"}', 'RetryCount': 0, 'ErrorDetails': None}
+No new rows found at 2025-01-08T05:43:42.234006+00:00.
+Polling BigQuery at 2025-01-08T05:43:47.236686+00:00...
+
+
+##########
+
+% gsutil ls gs://dataflow-temp-spanner-bq-shared-db/temp/
+
+gs://dataflow-temp-spanner-bq-shared-db/temp/dlq/
+gs://dataflow-temp-spanner-bq-shared-db/temp/dlq/
+zsh: no such file or directory: gs://dataflow-temp-spanner-bq-shared-db/temp/dlq/
+ai-learningharshvardhan@harshvadhansAir payment-system % gsutil ls gs://dataflow-temp-spanner-bq-shared-db/temp/dlq/
+gs://dataflow-temp-spanner-bq-shared-db/temp/dlq/retry/
+
+
+% gsutil cp gs://dataflow-temp-spanner-bq-shared-db/temp/dlq/severe/2025/01/08/05/59/error-pane-0-last-00019-of-00020.json .
+
+      "Watermark": {
+        "name": "Watermark",
+        "type": {
+          "code": "{\"code\":\"TIMESTAMP\"}"
+        },
+        "isPrimaryKey": false,
+        "ordinalPosition": 7
+      }
+    },
+    "_metadata_error": {
+      "errors": [
+        {
+          "debugInfo": "",
+          "location": "PartitionToken",
+          "message": "no such field: PartitionToken.",
+          "reason": "invalid"
+        }
+      ],
+      "index": 7
+    },
+    "_metadata_retry_count": 6
+  },
+  "error_message": null
+}
+
+Understand the Categories
+Retry (retry/): Contains records that may fail due to temporary issues (e.g., transient errors or service unavailability). These records are typically eligible for reprocessing.
+Severe (severe/): Contains records that fail due to critical issues like schema mismatches, invalid data, or type incompatibility. These often need manual intervention.
+
+
+General Rule: For a seamless Dataflow job, ensure that:
+
+The BigQuery table schema aligns with the schema of the monitored Spanner table.
+Newly added columns in Spanner are also added to BigQuery.
+
+
+####
+
+FIX:
+
+Adding the missing column in bigquery table:
+
+Before:
+
+% bq show --schema --format=prettyjson spanner-gke-443910:audit_service_dataset.payment_audit_trail_changelog | jq -r '.[] | [.name, .type, .mode] | @tsv' | column -t -s$'\t'
+
+PUID                                                          STRING
+Action                                                        STRING
+Timestamp                                                     TIMESTAMP
+Status                                                        STRING
+ServiceName                                                   STRING
+Metadata                                                      JSON
+RetryCount                                                    INTEGER
+ErrorDetails                                                  STRING
+_metadata_spanner_mod_type                                    STRING
+_metadata_spanner_table_name                                  STRING
+_metadata_spanner_commit_timestamp                            TIMESTAMP
+_metadata_spanner_server_transaction_id                       STRING
+_metadata_spanner_record_sequence                             STRING
+_metadata_spanner_is_last_record_in_transaction_in_partition  BOOLEAN
+_metadata_spanner_number_of_records_in_transaction            INTEGER
+_metadata_spanner_number_of_partitions_in_transaction         INTEGER
+_metadata_big_query_commit_timestamp                          TIMESTAMP
+UserId                                                        STRING
+Source                                                        STRING
+TransactionId                                                 STRING
+Processed                                                     BOOLEAN
+ai-learningharshvardhan@harshvadhansAir payment-system % 
+
+After:
+
+ALTER TABLE `spanner-gke-443910.audit_service_dataset.payment_audit_trail_changelog`
+ADD COLUMN DataSource STRING;
+
+% bq show --schema --format=prettyjson spanner-gke-443910:audit_service_dataset.payment_audit_trail_changelog | jq -r '.[] | [.name, .type, .mode] | @tsv' | column -t -s$'\t'
+  
+PUID                                                          STRING
+Action                                                        STRING
+Timestamp                                                     TIMESTAMP
+Status                                                        STRING
+ServiceName                                                   STRING
+Metadata                                                      JSON
+RetryCount                                                    INTEGER
+ErrorDetails                                                  STRING
+_metadata_spanner_mod_type                                    STRING
+_metadata_spanner_table_name                                  STRING
+_metadata_spanner_commit_timestamp                            TIMESTAMP
+_metadata_spanner_server_transaction_id                       STRING
+_metadata_spanner_record_sequence                             STRING
+_metadata_spanner_is_last_record_in_transaction_in_partition  BOOLEAN
+_metadata_spanner_number_of_records_in_transaction            INTEGER
+_metadata_spanner_number_of_partitions_in_transaction         INTEGER
+_metadata_big_query_commit_timestamp                          TIMESTAMP
+UserId                                                        STRING
+Source                                                        STRING
+TransactionId                                                 STRING
+Processed                                                     BOOLEAN
+DataSource                                                    STRING
+
+
+######
+
+
+ai-learningharshvardhan@harshvadhansAir payment-system % bq query --nouse_legacy_sql "SELECT COUNT(*) AS total_rows FROM \`spanner-gke-443910.audit_service_dataset.payment_audit_trail_changelog\`"
+
++------------+
+| total_rows |
++------------+
+|       6286 |
++------------+
+
+[2025-01-08T06:17:07.243305+00:00] Logged to BigQuery: Spanner - Inserted record: {'PUID': '7aaaf7c9-8bb8-4cfb-96f4-8cbe046a658d', 'Action': 'CREATE_PAYMENT', 'Status': 'SUCCESS', 'Timestamp': datetime.datetime(2025, 1, 8, 6, 17, 6, 461044, tzinfo=datetime.timezone.utc), 'ServiceName': 'Test-service', 'DataSource': 'InderBank', 'Metadata': '{"amount": 100.50, "currency": "USD"}', 'RetryCount': 0, 'ErrorDetails': None}
+Inserted record into Spanner: {'PUID': '7aaaf7c9-8bb8-4cfb-96f4-8cbe046a658d', 'Action': 'CREATE_PAYMENT', 'Status': 'SUCCESS', 'Timestamp': datetime.datetime(2025, 1, 8, 6, 17, 6, 461044, tzinfo=datetime.timezone.utc), 'ServiceName': 'Test-service', 'DataSource': 'InderBank', 'Metadata': '{"amount": 100.50, "currency": "USD"}', 'RetryCount': 0, 'ErrorDetails': None}
+Polling BigQuery at 2025-01-08T06:17:07.537007+00:00...
+
+
+CONCLUSION: After adding the new column, system automatically recovered.
+
+
+Next secnerio:
+
+What happend, if any  on a diffrent, where this column is not present & if some data got inserted ?
+
+
+% bq query --use_legacy_sql=false \
+"SELECT * FROM \`spanner-gke-443910.audit_service_dataset.payment_audit_trail_changelog\` WHERE PUID = '2a5f7d4c-0d98-4ef6-81d8-b1e92abe020b';"
+
++--------------------------------------+----------------+---------------------+---------+--------------+-----------------------------------+------------+--------------+----------------------------+------------------------------+------------------------------------+-----------------------------------------+-----------------------------------+--------------------------------------------------------------+----------------------------------------------------+-------------------------------------------------------+--------------------------------------+--------+--------+---------------+-----------+------------+
+|                 PUID                 |     Action     |      Timestamp      | Status  | ServiceName  |             Metadata              | RetryCount | ErrorDetails | _metadata_spanner_mod_type | _metadata_spanner_table_name | _metadata_spanner_commit_timestamp | _metadata_spanner_server_transaction_id | _metadata_spanner_record_sequence | _metadata_spanner_is_last_record_in_transaction_in_partition | _metadata_spanner_number_of_records_in_transaction | _metadata_spanner_number_of_partitions_in_transaction | _metadata_big_query_commit_timestamp | UserId | Source | TransactionId | Processed | DataSource |
++--------------------------------------+----------------+---------------------+---------+--------------+-----------------------------------+------------+--------------+----------------------------+------------------------------+------------------------------------+-----------------------------------------+-----------------------------------+--------------------------------------------------------------+----------------------------------------------------+-------------------------------------------------------+--------------------------------------+--------+--------+---------------+-----------+------------+
+| 2a5f7d4c-0d98-4ef6-81d8-b1e92abe020b | CREATE_PAYMENT | 2025-01-08 06:44:08 | SUCCESS | Test-service | {"amount":100.5,"currency":"USD"} |          0 | NULL         | INSERT                     | test_table                   |                2025-01-08 06:44:09 | MTIwMTYwMjMzNjQ3OTU2MjgzMDE=            | 00000000                          |                                                         true |                                                  1 |                                                     1 |                  2025-01-08 06:44:11 | NULL   | NULL   | NULL          |      NULL | NULL       |
++--------------------------------------+----------------+---------------------+---------+--------------+-----------------------------------+------------+--------------+----------------------------+------------------------------+------------------------------------+-----------------------------------------+-----------------------------------+--------------------------------------------------------------+----------------------------------------------------+-------------------------------------------------------+--------------------------------------+--------+--------+---------------+-----------+------------+
+ai-learningharshvardhan@harshvadhansAir payment-system % 
+
+PUID	Action	Timestamp	Status	ServiceName	Metadata	RetryCount	ErrorDetails	_metadata_spanner_mod_type	_metadata_spanner_table_name	_metadata_spanner_commit_timestamp	_metadata_spanner_server_transaction_id	_metadata_spanner_record_sequence	_metadata_spanner_is_last_record_in_transaction_in_partition	_metadata_spanner_number_of_records_in_transaction	_metadata_spanner_number_of_partitions_in_transaction	_metadata_big_query_commit_timestamp	UserId	Source	TransactionId	Processed	DataSource
+2a5f7d4c-0d98-4ef6-81d8-b1e92abe020b	CREATE_PAYMENT	2025-01-08 06:44:08.727888 UTC	SUCCESS	Test-service	{"amount":100.5,"currency":"USD"}	0		INSERT	test_table	2025-01-08 06:44:09.103839 UTC	MTIwMTYwMjMzNjQ3OTU2MjgzMDE=	0	TRUE	1	1	2025-01-08 06:44:11.458576 UTC					
+
+SELECT 
+    puld, 
+    puidHash, 
+    messagePayload, 
+    createTimestamp, 
+    updatedTimestamp, 
+    processingNode, 
+    currentState, 
+    paymentNotes, 
+    PaymentStatus
+FROM 
+    `spanner-gke-443910.audit_service_dataset.payment_audit_trail_changelog`
+WHERE 
+    puld = '55ca3a01-aaed-40';  -- Replace with the PUID you want to search for
+
+
+SELECT 
+    puld, 
+    puidHash, 
+    JSON_EXTRACT(messagePayload, '$.Header') AS Header,
+    JSON_EXTRACT(messagePayload, '$.Body') AS Body,
+    JSON_EXTRACT(messagePayload, '$.Trailer') AS Trailer,
+    JSON_EXTRACT(messagePayload, '$.FinalStage') AS FinalStage,
+    JSON_EXTRACT(messagePayload, '$.Audit') AS Audit
+FROM 
+    `spanner-gke-443910.audit_service_dataset.payment_audit_trail_changelog`
+WHERE 
+    puld = '55ca3a01-aaed-40';  -- Replace with your search criteria
+
+
+
+puld
+puidHash
+Header
+Body
+Trailer
+FinalStage
+Audit
+1	
+55ca3a01-aaed-40
+82049977ce86286d670b676ba9f02e7f
+{"puid":"55ca3a01-aaed-40","stage":1,"timestamp":"2025-01-10T00:28:06.220534+00:00"}
+{"details":"Payment in progress","puid":"55ca3a01-aaed-40","stage":2}
+{"additional_info":"Payment successfully completed","puid":"55ca3a01-aaed-40","stage":3,"status":"Completed"}
+{"puid":"55ca3a01-aaed-40","stage":4,"status":"Final"}
+{"audit_timestamp":"2025-01-10T00:28:06.220564+00:00","puid":"55ca3a01-aaed-40","stage":5}
+2	
+55ca3a01-aaed-40
+82049977ce86286d670b676ba9f02e7f
+{"puid":"55ca3a01-aaed-40","stage":1,"timestamp":"2025-01-10T00:28:06.220534+00:00"}
+{"details":"Payment in progress","puid":"55ca3a01-aaed-40","stage":2}
+{"additional_info":"Payment successfully completed","puid":"55ca3a01-aaed-40","stage":3,"status":"Completed"}
+{"puid":"55ca3a01-aaed-40","stage":4,"status":"Final"}
+{"audit_timestamp":"2025-01-10T00:28:06.220564+00:00","puid":"55ca3a01-aaed-40","stage":5}
+
+
+
+
+
+####
+
+**USECASE - JSON PAYLOAD**
+
+Single Entry per PUID:
+
+There will be only one row per PUID in the Spanner table. The puid is a unique identifier for each payment transaction.
+
+Incremental Updates to messagePayload:
+
+The messagePayload column will be updated dynamically as each stage completes. This means:
+
+- For each payment, we start with an empty JSON structure.
+- As each stage (1 through 5) completes, the relevant part of the JSON structure (such as Header, Body, Trailer, RiskAssessment, FinalStage) gets updated, and new information is added to the messagePayload.
+- By the end of the payment processing, the messagePayload will contain all the necessary details for each stage.
+
+FAT-Message Structure (Wrapper):
+
+- FAT (Fully-Available-Transaction) Wrapper: The messagePayload is designed to have a structured hierarchy with all the stages of the transaction encapsulated within it.
+
+- The messagePayload will include a trailer that summarizes or flags important information from the previous stages (like transaction status).
+
+- At each stage, new data is added as a key-value pair in the existing JSON object, ensuring it grows progressively as the payment moves through different stages (e.g., payment initialization, fraud check, risk assessment, payment completion, audit).
+
+Example of Final messagePayload:
+
+For a single PUID, by the time the payment is processed through all 5 stages, the resulting messagePayload in Spanner would look something like this:
+
+{
+  "Header": {
+    "puid": "32bcfcab-dbf2-4b",
+    "timestamp": "2025-01-10T09:51:04.916168+00:00",
+    "stage": 1,
+    "transactionId": "f63fa329-0d3e-431a-87d4-46db916ea0a3"
+  },
+  "Body": {
+    "puid": "32bcfcab-dbf2-4b",
+    "stage": 2,
+    "details": "Payment initialized",
+    "amount": 100.0,
+    "currency": "USD",
+    "paymentType": "Domestic Transfer"
+  },
+  "Trailer": {
+    "puid": "32bcfcab-dbf2-4b",
+    "stage": 3,
+    "status": "Payment in progress",
+    "additional_info": "Payment stage 1 completed"
+  },
+  "RiskAssessment": {
+    "puid": "32bcfcab-dbf2-4b",
+    "stage": 4,
+    "fraudCheck": true,
+    "fraudStatus": "Flagged",
+    "chargebackStatus": "None"
+  },
+  "FinalStage": {
+    "puid": "32bcfcab-dbf2-4b",
+    "stage": 5,
+    "status": "Final",
+    "settlementAmount": 97.5,
+    "settlementStatus": "Completed"
+  }
+}
+
+Key Points:
+
+- Single Row per PUID: The PUID is the key identifier, and only one row will be created for each payment in the Spanner table.
+- Progressive Updates: The messagePayload will keep getting updated as the payment moves through stages.
+- FAT Wrapper Structure: The messagePayload will maintain the full structure throughout all stages, with each stage being added as a nested part of the JSON object.
+
+
+
+
+% bq query --use_legacy_sql=false 'SELECT puid, messagePayload FROM `spanner-gke-443910.audit_service_dataset.payment_audit_trail_changelog` WHERE puid = "21988a1d-548c-4b" ORDER BY Timestamp DESC LIMIT 10'
+
++------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|       puid       |                                                                                                                                                                                                                                                                                                                                                                                                                                                                         messagePayload                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
++------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| 21988a1d-548c-4b | {"Audit":{"actionDetails":"Transaction initiated, processed, and completed successfully","audit_timestamp":"2025-01-10T15:22:39.591071+00:00","internalComments":"No issues during processing","operatorId":"op987","puid":"21988a1d-548c-4b","stage":6,"userId":"user123"},"Body":{"amount":100,"currency":"USD","details":"Payment initiated","paymentType":"Domestic Transfer","puid":"21988a1d-548c-4b","stage":2},"FinalStage":{"puid":"21988a1d-548c-4b","settlementAmount":97.5,"settlementStatus":"Completed","stage":5,"status":"Final"},"Header":{"puid":"21988a1d-548c-4b","stage":1,"timestamp":"2025-01-10T15:22:39.590973+00:00","transactionId":"821d2111-3f68-4b38-96e4-c6955e8d4dc5"},"RiskAssessment":{"chargebackStatus":"None","fraudCheck":true,"fraudStatus":"Flagged","puid":"21988a1d-548c-4b","stage":4},"Trailer":{"additional_info":"Payment stage 1 completed","puid":"21988a1d-548c-4b","stage":3,"status":"Payment in progress"}} |
++------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+ai-learningharshvardhan@harshvadhansAir payment-system % 
+
+
+
+
+-- Equvalent BQ SQL Query:
+
+SELECT puid, TO_JSON_STRING(messagePayload) AS messagePayload
+FROM `spanner-gke-443910.audit_service_dataset.payment_audit_trail_changelog`
+WHERE puid = "21988a1d-548c-4b"
+ORDER BY Timestamp DESC
+LIMIT 10;
+
+[{
+  "puid": "21988a1d-548c-4b",
+  "messagePayload": "{\"Audit\":{\"actionDetails\":\"Transaction initiated, processed, and completed successfully\",\"audit_timestamp\":\"2025-01-10T15:22:39.591071+00:00\",\"internalComments\":\"No issues during processing\",\"operatorId\":\"op987\",\"puid\":\"21988a1d-548c-4b\",\"stage\":6,\"userId\":\"user123\"},\"Body\":{\"amount\":100,\"currency\":\"USD\",\"details\":\"Payment initiated\",\"paymentType\":\"Domestic Transfer\",\"puid\":\"21988a1d-548c-4b\",\"stage\":2},\"FinalStage\":{\"puid\":\"21988a1d-548c-4b\",\"settlementAmount\":97.5,\"settlementStatus\":\"Completed\",\"stage\":5,\"status\":\"Final\"},\"Header\":{\"puid\":\"21988a1d-548c-4b\",\"stage\":1,\"timestamp\":\"2025-01-10T15:22:39.590973+00:00\",\"transactionId\":\"821d2111-3f68-4b38-96e4-c6955e8d4dc5\"},\"RiskAssessment\":{\"chargebackStatus\":\"None\",\"fraudCheck\":true,\"fraudStatus\":\"Flagged\",\"puid\":\"21988a1d-548c-4b\",\"stage\":4},\"Trailer\":{\"additional_info\":\"Payment stage 1 completed\",\"puid\":\"21988a1d-548c-4b\",\"stage\":3,\"status\":\"Payment in progress\"}}"
+}]
+
+
+-- **LIMITATION with bq studio**
+
+- The RESULT, don't show-up with complete output but only show last stage 
+- Question: Is there any limits on max characters to be showcases ?
+
+
+---- IN SPANNER ----
+
+SELECT * FROM PaymentMilestoneEvents WHERE puid = '21988a1d-548c-4b';
+
+
+puid
+puidHash
+messagePayload
+createTimestamp
+updatedTimestamp
+processingNode
+currentState
+paymentNotes
+PaymentStatus
+21988a1d-548c-4b
+2037a109ed6f1bf48bf7d7cdf651a109
+{"Audit":{"actionDetails":"Transaction initiated, processed, and completed successfully","audit_timestamp":"2025-01-10T15:22:39.591071+00:00","internalComments":"No issues during processing","operatorId":"op987","puid":"21988a1d-548c-4b","stage":6,"userId":"user123"},"Body":{"amount":100.0,"currency":"USD","details":"Payment initiated","paymentType":"Domestic Transfer","puid":"21988a1d-548c-4b","stage":2},"FinalStage":{"puid":"21988a1d-548c-4b","settlementAmount":97.5,"settlementStatus":"Completed","stage":5,"status":"Final"},"Header":{"puid":"21988a1d-548c-4b","stage":1,"timestamp":"2025-01-10T15:22:39.590973+00:00","transactionId":"821d2111-3f68-4b38-96e4-c6955e8d4dc5"},"RiskAssessment":{"chargebackStatus":"None","fraudCheck":true,"fraudStatus":"Flagged","puid":"21988a1d-548c-4b","stage":4},"Trailer":{"additional_info":"Payment stage 1 completed","puid":"21988a1d-548c-4b","stage":3,"status":"Payment in progress"}}
+2025-01-10T15:22:39.591331Z
+2025-01-10T15:22:39.591332Z
+Node1
+INITIAL
+First payment of the day
+SUCCESS
+
+#####
 
 
