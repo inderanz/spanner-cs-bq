@@ -3282,3 +3282,32 @@ LIMIT 10;
 
 - The RESULT, don't show-up with complete output but only show last stage 
 - Question: Is there any limits on max characters to be showcases ?
+
+
+---- IN SPANNER ----
+
+SELECT * FROM PaymentMilestoneEvents WHERE puid = '21988a1d-548c-4b';
+
+
+puid
+puidHash
+messagePayload
+createTimestamp
+updatedTimestamp
+processingNode
+currentState
+paymentNotes
+PaymentStatus
+21988a1d-548c-4b
+2037a109ed6f1bf48bf7d7cdf651a109
+{"Audit":{"actionDetails":"Transaction initiated, processed, and completed successfully","audit_timestamp":"2025-01-10T15:22:39.591071+00:00","internalComments":"No issues during processing","operatorId":"op987","puid":"21988a1d-548c-4b","stage":6,"userId":"user123"},"Body":{"amount":100.0,"currency":"USD","details":"Payment initiated","paymentType":"Domestic Transfer","puid":"21988a1d-548c-4b","stage":2},"FinalStage":{"puid":"21988a1d-548c-4b","settlementAmount":97.5,"settlementStatus":"Completed","stage":5,"status":"Final"},"Header":{"puid":"21988a1d-548c-4b","stage":1,"timestamp":"2025-01-10T15:22:39.590973+00:00","transactionId":"821d2111-3f68-4b38-96e4-c6955e8d4dc5"},"RiskAssessment":{"chargebackStatus":"None","fraudCheck":true,"fraudStatus":"Flagged","puid":"21988a1d-548c-4b","stage":4},"Trailer":{"additional_info":"Payment stage 1 completed","puid":"21988a1d-548c-4b","stage":3,"status":"Payment in progress"}}
+2025-01-10T15:22:39.591331Z
+2025-01-10T15:22:39.591332Z
+Node1
+INITIAL
+First payment of the day
+SUCCESS
+
+#####
+
+
