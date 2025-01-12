@@ -11,6 +11,7 @@ steps:
         echo "Dataflow Pipeline: ${_DATAFLOW_PIPELINE}"
         echo "Action: ${_ACTION}"
 
+        # BigQuery pipeline
         if [ "${_PIPELINE}" = "bigquery" ]; then
           if [ ! -d "envs/${_ENV}/bigquery/${_INSTANCE}" ]; then
             echo "Directory envs/${_ENV}/bigquery/${_INSTANCE} does not exist!"
@@ -36,6 +37,7 @@ steps:
             exit 1
           fi
 
+        # Dataflow pipeline
         elif [ "${_PIPELINE}" = "dataflow" ]; then
           if [ ! -d "envs/${_ENV}/dataflow/${_DATAFLOW_PIPELINE}" ]; then
             echo "Directory envs/${_ENV}/dataflow/${_DATAFLOW_PIPELINE} does not exist!"
@@ -61,8 +63,34 @@ steps:
             exit 1
           fi
 
+        # Pub/Sub pipeline
+        elif [ "${_PIPELINE}" = "pubsub" ]; then
+          if [ ! -d "envs/${_ENV}/pubsub" ]; then
+            echo "Directory envs/${_ENV}/pubsub does not exist!"
+            exit 1
+          fi
+
+          cd envs/${_ENV}/pubsub
+          terraform init -backend-config="bucket=${_TF_STATE_BUCKET}" -backend-config="prefix=envs/${_ENV}/pubsub"
+
+          if [ ! -f "override.tfvars" ]; then
+            echo "override.tfvars file is missing!"
+            exit 1
+          fi
+
+          if [ "${_ACTION}" = "apply" ]; then
+            terraform plan -input=false -var-file="override.tfvars" -out=tfplan
+            terraform apply -input=false -auto-approve tfplan
+          elif [ "${_ACTION}" = "destroy" ]; then
+            terraform plan -destroy -input=false -var-file="override.tfvars" -out=tfplan
+            terraform apply -input=false -auto-approve tfplan
+          else
+            echo "Invalid _ACTION value. Use 'apply' or 'destroy'."
+            exit 1
+          fi
+
         else
-          echo "Invalid _PIPELINE value. Use 'bigquery' or 'dataflow'."
+          echo "Invalid _PIPELINE value. Use 'bigquery', 'dataflow', or 'pubsub'."
           exit 1
         fi
 
@@ -70,8 +98,8 @@ substitutions:
   _TF_STATE_BUCKET: "terraform-spanner-bq"
   _ENV: "dev"
   _INSTANCE: "shared-instance-1-dev"
-  _PIPELINE: "dataflow"
-  _DATAFLOW_PIPELINE: "spanner-to-bigquery"
+  _PIPELINE: "pubsub"
+  _DATAFLOW_PIPELINE: ""
   _ACTION: "apply"
 
 timeout: "1200s"
