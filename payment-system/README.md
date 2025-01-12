@@ -3118,3 +3118,167 @@ ai-learningharshvardhan@harshvadhansAir payment-system %
 
 PUID	Action	Timestamp	Status	ServiceName	Metadata	RetryCount	ErrorDetails	_metadata_spanner_mod_type	_metadata_spanner_table_name	_metadata_spanner_commit_timestamp	_metadata_spanner_server_transaction_id	_metadata_spanner_record_sequence	_metadata_spanner_is_last_record_in_transaction_in_partition	_metadata_spanner_number_of_records_in_transaction	_metadata_spanner_number_of_partitions_in_transaction	_metadata_big_query_commit_timestamp	UserId	Source	TransactionId	Processed	DataSource
 2a5f7d4c-0d98-4ef6-81d8-b1e92abe020b	CREATE_PAYMENT	2025-01-08 06:44:08.727888 UTC	SUCCESS	Test-service	{"amount":100.5,"currency":"USD"}	0		INSERT	test_table	2025-01-08 06:44:09.103839 UTC	MTIwMTYwMjMzNjQ3OTU2MjgzMDE=	0	TRUE	1	1	2025-01-08 06:44:11.458576 UTC					
+
+SELECT 
+    puld, 
+    puidHash, 
+    messagePayload, 
+    createTimestamp, 
+    updatedTimestamp, 
+    processingNode, 
+    currentState, 
+    paymentNotes, 
+    PaymentStatus
+FROM 
+    `spanner-gke-443910.audit_service_dataset.payment_audit_trail_changelog`
+WHERE 
+    puld = '55ca3a01-aaed-40';  -- Replace with the PUID you want to search for
+
+
+SELECT 
+    puld, 
+    puidHash, 
+    JSON_EXTRACT(messagePayload, '$.Header') AS Header,
+    JSON_EXTRACT(messagePayload, '$.Body') AS Body,
+    JSON_EXTRACT(messagePayload, '$.Trailer') AS Trailer,
+    JSON_EXTRACT(messagePayload, '$.FinalStage') AS FinalStage,
+    JSON_EXTRACT(messagePayload, '$.Audit') AS Audit
+FROM 
+    `spanner-gke-443910.audit_service_dataset.payment_audit_trail_changelog`
+WHERE 
+    puld = '55ca3a01-aaed-40';  -- Replace with your search criteria
+
+
+
+puld
+puidHash
+Header
+Body
+Trailer
+FinalStage
+Audit
+1	
+55ca3a01-aaed-40
+82049977ce86286d670b676ba9f02e7f
+{"puid":"55ca3a01-aaed-40","stage":1,"timestamp":"2025-01-10T00:28:06.220534+00:00"}
+{"details":"Payment in progress","puid":"55ca3a01-aaed-40","stage":2}
+{"additional_info":"Payment successfully completed","puid":"55ca3a01-aaed-40","stage":3,"status":"Completed"}
+{"puid":"55ca3a01-aaed-40","stage":4,"status":"Final"}
+{"audit_timestamp":"2025-01-10T00:28:06.220564+00:00","puid":"55ca3a01-aaed-40","stage":5}
+2	
+55ca3a01-aaed-40
+82049977ce86286d670b676ba9f02e7f
+{"puid":"55ca3a01-aaed-40","stage":1,"timestamp":"2025-01-10T00:28:06.220534+00:00"}
+{"details":"Payment in progress","puid":"55ca3a01-aaed-40","stage":2}
+{"additional_info":"Payment successfully completed","puid":"55ca3a01-aaed-40","stage":3,"status":"Completed"}
+{"puid":"55ca3a01-aaed-40","stage":4,"status":"Final"}
+{"audit_timestamp":"2025-01-10T00:28:06.220564+00:00","puid":"55ca3a01-aaed-40","stage":5}
+
+
+
+
+
+####
+
+**USECASE - JSON PAYLOAD**
+
+Single Entry per PUID:
+
+There will be only one row per PUID in the Spanner table. The puid is a unique identifier for each payment transaction.
+
+Incremental Updates to messagePayload:
+
+The messagePayload column will be updated dynamically as each stage completes. This means:
+
+- For each payment, we start with an empty JSON structure.
+- As each stage (1 through 5) completes, the relevant part of the JSON structure (such as Header, Body, Trailer, RiskAssessment, FinalStage) gets updated, and new information is added to the messagePayload.
+- By the end of the payment processing, the messagePayload will contain all the necessary details for each stage.
+
+FAT-Message Structure (Wrapper):
+
+- FAT (Fully-Available-Transaction) Wrapper: The messagePayload is designed to have a structured hierarchy with all the stages of the transaction encapsulated within it.
+
+- The messagePayload will include a trailer that summarizes or flags important information from the previous stages (like transaction status).
+
+- At each stage, new data is added as a key-value pair in the existing JSON object, ensuring it grows progressively as the payment moves through different stages (e.g., payment initialization, fraud check, risk assessment, payment completion, audit).
+
+Example of Final messagePayload:
+
+For a single PUID, by the time the payment is processed through all 5 stages, the resulting messagePayload in Spanner would look something like this:
+
+{
+  "Header": {
+    "puid": "32bcfcab-dbf2-4b",
+    "timestamp": "2025-01-10T09:51:04.916168+00:00",
+    "stage": 1,
+    "transactionId": "f63fa329-0d3e-431a-87d4-46db916ea0a3"
+  },
+  "Body": {
+    "puid": "32bcfcab-dbf2-4b",
+    "stage": 2,
+    "details": "Payment initialized",
+    "amount": 100.0,
+    "currency": "USD",
+    "paymentType": "Domestic Transfer"
+  },
+  "Trailer": {
+    "puid": "32bcfcab-dbf2-4b",
+    "stage": 3,
+    "status": "Payment in progress",
+    "additional_info": "Payment stage 1 completed"
+  },
+  "RiskAssessment": {
+    "puid": "32bcfcab-dbf2-4b",
+    "stage": 4,
+    "fraudCheck": true,
+    "fraudStatus": "Flagged",
+    "chargebackStatus": "None"
+  },
+  "FinalStage": {
+    "puid": "32bcfcab-dbf2-4b",
+    "stage": 5,
+    "status": "Final",
+    "settlementAmount": 97.5,
+    "settlementStatus": "Completed"
+  }
+}
+
+Key Points:
+
+- Single Row per PUID: The PUID is the key identifier, and only one row will be created for each payment in the Spanner table.
+- Progressive Updates: The messagePayload will keep getting updated as the payment moves through stages.
+- FAT Wrapper Structure: The messagePayload will maintain the full structure throughout all stages, with each stage being added as a nested part of the JSON object.
+
+
+
+
+% bq query --use_legacy_sql=false 'SELECT puid, messagePayload FROM `spanner-gke-443910.audit_service_dataset.payment_audit_trail_changelog` WHERE puid = "21988a1d-548c-4b" ORDER BY Timestamp DESC LIMIT 10'
+
++------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|       puid       |                                                                                                                                                                                                                                                                                                                                                                                                                                                                         messagePayload                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
++------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| 21988a1d-548c-4b | {"Audit":{"actionDetails":"Transaction initiated, processed, and completed successfully","audit_timestamp":"2025-01-10T15:22:39.591071+00:00","internalComments":"No issues during processing","operatorId":"op987","puid":"21988a1d-548c-4b","stage":6,"userId":"user123"},"Body":{"amount":100,"currency":"USD","details":"Payment initiated","paymentType":"Domestic Transfer","puid":"21988a1d-548c-4b","stage":2},"FinalStage":{"puid":"21988a1d-548c-4b","settlementAmount":97.5,"settlementStatus":"Completed","stage":5,"status":"Final"},"Header":{"puid":"21988a1d-548c-4b","stage":1,"timestamp":"2025-01-10T15:22:39.590973+00:00","transactionId":"821d2111-3f68-4b38-96e4-c6955e8d4dc5"},"RiskAssessment":{"chargebackStatus":"None","fraudCheck":true,"fraudStatus":"Flagged","puid":"21988a1d-548c-4b","stage":4},"Trailer":{"additional_info":"Payment stage 1 completed","puid":"21988a1d-548c-4b","stage":3,"status":"Payment in progress"}} |
++------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+ai-learningharshvardhan@harshvadhansAir payment-system % 
+
+
+
+
+-- Equvalent BQ SQL Query:
+
+SELECT puid, TO_JSON_STRING(messagePayload) AS messagePayload
+FROM `spanner-gke-443910.audit_service_dataset.payment_audit_trail_changelog`
+WHERE puid = "21988a1d-548c-4b"
+ORDER BY Timestamp DESC
+LIMIT 10;
+
+[{
+  "puid": "21988a1d-548c-4b",
+  "messagePayload": "{\"Audit\":{\"actionDetails\":\"Transaction initiated, processed, and completed successfully\",\"audit_timestamp\":\"2025-01-10T15:22:39.591071+00:00\",\"internalComments\":\"No issues during processing\",\"operatorId\":\"op987\",\"puid\":\"21988a1d-548c-4b\",\"stage\":6,\"userId\":\"user123\"},\"Body\":{\"amount\":100,\"currency\":\"USD\",\"details\":\"Payment initiated\",\"paymentType\":\"Domestic Transfer\",\"puid\":\"21988a1d-548c-4b\",\"stage\":2},\"FinalStage\":{\"puid\":\"21988a1d-548c-4b\",\"settlementAmount\":97.5,\"settlementStatus\":\"Completed\",\"stage\":5,\"status\":\"Final\"},\"Header\":{\"puid\":\"21988a1d-548c-4b\",\"stage\":1,\"timestamp\":\"2025-01-10T15:22:39.590973+00:00\",\"transactionId\":\"821d2111-3f68-4b38-96e4-c6955e8d4dc5\"},\"RiskAssessment\":{\"chargebackStatus\":\"None\",\"fraudCheck\":true,\"fraudStatus\":\"Flagged\",\"puid\":\"21988a1d-548c-4b\",\"stage\":4},\"Trailer\":{\"additional_info\":\"Payment stage 1 completed\",\"puid\":\"21988a1d-548c-4b\",\"stage\":3,\"status\":\"Payment in progress\"}}"
+}]
+
+
+-- **LIMITATION with bq studio**
+
+- The RESULT, don't show-up with complete output but only show last stage 
+- Question: Is there any limits on max characters to be showcases ?
