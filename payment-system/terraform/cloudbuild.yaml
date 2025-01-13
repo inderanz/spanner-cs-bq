@@ -11,6 +11,7 @@ steps:
         echo "Dataflow Pipeline: ${_DATAFLOW_PIPELINE}"
         echo "Action: ${_ACTION}"
 
+        # BigQuery pipeline
         if [ "${_PIPELINE}" = "bigquery" ]; then
           if [ ! -d "envs/${_ENV}/bigquery/${_INSTANCE}" ]; then
             echo "Directory envs/${_ENV}/bigquery/${_INSTANCE} does not exist!"
@@ -36,6 +37,7 @@ steps:
             exit 1
           fi
 
+        # Dataflow pipeline
         elif [ "${_PIPELINE}" = "dataflow" ]; then
           if [ ! -d "envs/${_ENV}/dataflow/${_DATAFLOW_PIPELINE}" ]; then
             echo "Directory envs/${_ENV}/dataflow/${_DATAFLOW_PIPELINE} does not exist!"
@@ -44,6 +46,38 @@ steps:
 
           cd envs/${_ENV}/dataflow/${_DATAFLOW_PIPELINE}
           terraform init -backend-config="bucket=${_TF_STATE_BUCKET}" -backend-config="prefix=envs/${_ENV}/dataflow/${_DATAFLOW_PIPELINE}"
+
+          if [ ! -f "override.tfvars" ]; then
+            echo "override.tfvars file is missing!"
+            exit 1
+          fi
+
+          if [ "${_DATAFLOW_PIPELINE}" = "spanner-to-pubsub" ]; then
+            echo "Provisioning spanner-to-pubsub Dataflow pipeline..."
+          elif [ "${_DATAFLOW_PIPELINE}" = "pubsub-to-bigquery" ]; then
+            echo "Provisioning pubsub-to-bigquery Dataflow pipeline..."
+          fi
+
+          if [ "${_ACTION}" = "apply" ]; then
+            terraform plan -input=false -var-file="override.tfvars" -out=tfplan
+            terraform apply -input=false -auto-approve tfplan
+          elif [ "${_ACTION}" = "destroy" ]; then
+            terraform plan -destroy -input=false -var-file="override.tfvars" -out=tfplan
+            terraform apply -input=false -auto-approve tfplan
+          else
+            echo "Invalid _ACTION value. Use 'apply' or 'destroy'."
+            exit 1
+          fi
+
+        # Pub/Sub Subscription pipeline
+        elif [ "${_PIPELINE}" = "pubsub-subscription" ]; then
+          if [ ! -d "envs/${_ENV}/pubsub-sub" ]; then
+            echo "Directory envs/${_ENV}/pubsub-sub does not exist!"
+            exit 1
+          fi
+
+          cd envs/${_ENV}/pubsub-sub
+          terraform init -backend-config="bucket=${_TF_STATE_BUCKET}" -backend-config="prefix=envs/${_ENV}/pubsub-sub"
 
           if [ ! -f "override.tfvars" ]; then
             echo "override.tfvars file is missing!"
@@ -62,7 +96,7 @@ steps:
           fi
 
         else
-          echo "Invalid _PIPELINE value. Use 'bigquery' or 'dataflow'."
+          echo "Invalid _PIPELINE value. Use 'bigquery', 'dataflow', or 'pubsub-subscription'."
           exit 1
         fi
 
@@ -71,7 +105,7 @@ substitutions:
   _ENV: "dev"
   _INSTANCE: "shared-instance-1-dev"
   _PIPELINE: "dataflow"
-  _DATAFLOW_PIPELINE: "spanner-to-bigquery"
+  _DATAFLOW_PIPELINE: "pubsub-to-bigquery"
   _ACTION: "apply"
 
 timeout: "1200s"
