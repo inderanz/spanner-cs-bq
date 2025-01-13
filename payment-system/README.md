@@ -3310,4 +3310,123 @@ SUCCESS
 
 #####
 
+JOB's
+Dataflow:
+Destroy
+
+ % gcloud builds submit \
+    --config=cloudbuild.yaml \
+    --substitutions=_PIPELINE=dataflow,_DATAFLOW_PIPELINE=spanner-to-pubsub,_ACTION=destroy,_ENV=dev \
+    --service-account="projects/spanner-gke-443910/serviceAccounts/cloudbuild-cicd@spanner-gke-443910.iam.gserviceaccount.com" \
+    --gcs-log-dir="gs://cloud-build-logs-spanner-gke-443910"
+
+Apply:
+
+ gcloud builds submit \
+    --config=cloudbuild.yaml \
+    --substitutions=_PIPELINE=dataflow,_DATAFLOW_PIPELINE=spanner-to-pubsub,_ACTION=apply,_ENV=dev \
+    --service-account="projects/spanner-gke-443910/serviceAccounts/cloudbuild-cicd@spanner-gke-443910.iam.gserviceaccount.com" \
+    --gcs-log-dir="gs://cloud-build-logs-spanner-gke-443910"
+
+
+
+
+Usecase: 
+
+--> Spanner to Pub/Sub
+
+The issue arises because the Spanner_Change_Streams_to_PubSub Dataflow job template and its counterpart PubSub_to_BigQuery_Flex are not designed to handle or transform Spanner change stream events into the original row format as stored in Spanner. Instead, they work with change event data emitted by Spanner's change stream feature.
+
+Key Points About Spanner Change Streams
+What Change Streams Emit:
+
+Spanner change streams emit change events that represent modifications (inserts, updates, or deletes) to rows in a Spanner table.
+The emitted event structure contains:
+mods: A list of changes (keysJson, newValuesJson, oldValuesJson).
+modType: Type of modification (INSERT, UPDATE, DELETE).
+Metadata such as commit timestamps, partition tokens, and transaction details.
+
+
+Below Event Example::
+
+{
+  "mods": [
+    {
+      "keysJson": "{\"puid\":\"ba76a577-3183-4f\"}",
+      "newValuesJson": "{\"puid\":\"ba76a577-3183-4f\",\"messagePayload\":\"{...}\",...}",
+      "oldValuesJson": "{\"puid\":\"ba76a577-3183-4f\",\"messagePayload\":\"{...}\",...}"
+    }
+  ],
+  "modType": "UPDATE",
+  "metadata": {
+    "commitTimestamp": "2025-01-13T13:33:17.802943+00:00",
+    ...
+  }
+}
+
+The original row content is embedded within newValuesJson.
+
+In Spanner:
+
+
+% python3 /Users/harshvardhan/Desktop/spanner-gke/gcp-npp/testing/spanner-pubsub-testing-1payload.py
+2025-01-14 00:33:19,637 - INFO - Inserted record into Spanner: {'puid': '7c554e39-7a33-40', 'puidHash': 'de933dd142f717e7d7632063f0f918e4', 'messagePayload': '{"Header": {"puid": "7c554e39-7a33-40", "timestamp": "2025-01-13T13:33:17.802943+00:00", "stage": 1, "transactionId": "def0fbcd-2e92-48e4-aa67-95dbb023a455"}, "Body": {"puid": "7c554e39-7a33-40", "stage": 2, "details": "Payment initiated", "amount": 100.0, "currency": "USD", "paymentType": "Domestic Transfer"}, "Trailer": {"puid": "7c554e39-7a33-40", "stage": 3, "status": "Payment in progress", "additional_info": "Payment stage 1 completed"}, "RiskAssessment": {"puid": "7c554e39-7a33-40", "stage": 4, "fraudCheck": true, "fraudStatus": "Flagged", "chargebackStatus": "None"}, "FinalStage": {"puid": "7c554e39-7a33-40", "stage": 5, "status": "Final", "settlementAmount": 97.5, "settlementStatus": "Completed"}, "Audit": {"puid": "7c554e39-7a33-40", "stage": 6, "audit_timestamp": "2025-01-13T13:33:17.802972+00:00", "userId": "user123", "operatorId": "op987", "actionDetails": "Transaction initiated, processed, and completed successfully", "internalComments": "No issues during processing"}}', 'createTimestamp': datetime.datetime(2025, 1, 13, 13, 33, 17, 803015, tzinfo=datetime.timezone.utc), 'updatedTimestamp': datetime.datetime(2025, 1, 13, 13, 33, 17, 803016, tzinfo=datetime.timezone.utc), 'processingNode': 'Node1', 'currentState': 'INITIAL', 'paymentNotes': 'Single record for Pub/Sub testing', 'PaymentStatus': 'SUCCESS'}
+2025-01-14 00:33:20,501 - INFO - Published message to Pub/Sub topic: 13532448093075977
+
+
+In Pub/Sub
+
+% gcloud pubsub subscriptions pull spanner-change-streams-subscription --limit=1 --auto-ack
+
+┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────                                                                                                                                                                                              DATA                                                                                                                                                                                                                                                                                                                          │     MESSAGE_ID    │ ORDERING_KEY │ ATTRIBUTES │ DELIVERY_ATTEMPT │ ACK_STATUS │
+├──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+│ {"partitionToken":"__8BAYEHAc4hd3AAAYLAy4NzaGFyZWRfYXVkaXRfZGJfY3MAAYSBBgL64BACgoKAgwjDZAAAAAAAAIQEL66Ml4VnNjQyXzMxMjQ3MzcAAf__hf8GK5YbggtMhv8GK5aDOASIh4DAZAEB__8","commitTimestamp":{"seconds":1736774851,"nanos":908207000},"serverTransactionId":"MzExNTkwMzQ3OTIwMTMzOTAwMg==","isLastRecordInTransactionInPartition":true,"recordSequence":"00000000","tableName":"Metadata_shared_db_bccdb8d6_3d49_46ea_ad38_18aa016d18c3","rowType":[{"name":"PartitionToken","type":{"code":"{\"code\":\"STRING\"}"},"isPrimaryKey":true,"ordinalPosition":1},{"name":"Watermark","type":{"code":"{\"code\":\"TIMESTAMP\"}"},"isPrimaryKey":false,"ordinalPosition":7}],"mods":[{"keysJson":"{\"PartitionToken\":\"__8BAYEHAc4hd3AAAYLAy4NzaGFyZWRfYXVkaXRfZGJfY3MAAYSBAIKAgwjDZAAAAAAB3YQEHbHBFIVnMF8wAAH__4X_BiuWEU-l2Yb_BiuWbshD8Yf_BiuWEU-l2cBkAQH__w\"}","oldValuesJson":"{\"Watermark\":\"2025-01-13T13:27:22.821Z\"}","newValuesJson":"{\"Watermark\":\"2025-01-13T13:27:29.655Z\"}"}],"modType":"UPDATE","valueCaptureType":"OLD_AND_NEW_VALUES","numberOfRecordsInTransaction":1,"numberOfPartitionsInTransaction":1,"transactionTag":"updateWatermark","isSystemTransaction":false,"metadata":{"partitionToken":"__8BAYEHAc4hd3AAAYLAy4NzaGFyZWRfYXVkaXRfZGJfY3MAAYSBBgL64BACgoKAgwjDZAAAAAAAAIQEL66Ml4VnNjQyXzMxMjQ3MzcAAf__hf8GK5YbggtMhv8GK5aDOASIh4DAZAEB__8","recordTimestamp":{"seconds":1736774851,"nanos":908207000},"partitionStartTimestamp":{"seconds":1736773566,"nanos":860108000},"partitionEndTimestamp":{"seconds":253402300799,"nanos":999999998},"partitionCreatedAt":{"seconds":1736773566,"nanos":914175000},"partitionScheduledAt":{"seconds":1736773567,"nanos":497039000},"partitionRunningAt":{"seconds":1736773567,"nanos":515199000},"queryStartedAt":{"seconds":-62135596800,"nanos":0},"recordStreamStartedAt":{"seconds":1736774852,"nanos":694000000},"recordStreamEndedAt":{"seconds":1736774852,"nanos":705000000},"recordReadAt":{"seconds":-62135596800,"nanos":0},"totalStreamTimeMillis":11,"numberOfRecordsRead":1}} │ 13528616349436161 │              │            │                  │ SUCCESS    │
+└─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┴───────────────────┴──────────────┴────────────┴──────────────────┴────────────┘
+(venv) ai-learningharshvardhan@harshvadhansAir terraform % 
+
+
+1. Spanner Change Streams to Pub/Sub Template
+
+Feature:
+
+Publishes raw Spanner change stream events to a Pub/Sub topic.
+Includes metadata, transaction details, and the mods array containing the actual changes.
+
+Limitation:
+
+It does not extract the row data from newValuesJson or reconstruct the original row format.
+Downstream systems receive complex change event data instead of a plain representation of the original row.
+
+
+2. Pub/Sub to BigQuery Template
+
+Feature:
+
+Reads messages from a Pub/Sub topic and writes them to BigQuery.
+Allows you to specify:
+The target BigQuery table (outputTableSpec).
+A Dead Letter Queue (DLQ) for failed messages (outputDeadletterTable).
+Supports JSON transformation via custom JavaScript UDFs.
+
+Limitation:
+
+
+It assumes that the incoming messages are in the final format required by the BigQuery schema.
+Does not natively parse or transform Spanner change events to extract newValuesJson for insertion.
+
+
+
+What's Going Wrong
+
+Event Format Mismatch:
+
+Spanner emits change events with nested structures (e.g., mods).
+The PubSub_to_BigQuery template expects plain JSON rows compatible with the target BigQuery table schema.
+As a result, raw Spanner change events fail the transformation and validation steps in the PubSub_to_BigQuery template.
+
+
+Dead Letter Queue (DLQ) Usage:
+
+Since the raw event format is incompatible, many messages are redirected to the DLQ.
+This indicates that the pipeline is failing to process messages due to schema mismatches or transformation issues.
 

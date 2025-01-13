@@ -3,11 +3,11 @@ job_name           = "spanner-to-pubsub"
 template_gcs_path  = "gs://dataflow-templates/latest/flex/Spanner_Change_Streams_to_PubSub"
 parameters = {
   spannerInstanceId          = "sample-instance"
-  spannerDatabase            = "audit-db"
+  spannerDatabase            = "shared-db"
   spannerMetadataInstanceId  = "sample-instance"
-  spannerMetadataDatabase    = "audit-db"
-  spannerChangeStreamName    = "audit_db_change_stream"
-  pubsubTopic                = "projects/spanner-gke-443910/topics/spanner-change-streams-topic"
+  spannerMetadataDatabase    = "shared-db"
+  spannerChangeStreamName    = "shared_audit_db_cs"
+  pubsubTopic                = "spanner-change-streams-topic"
 }
 
 # Networking Configuration
