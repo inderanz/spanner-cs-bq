@@ -1939,6 +1939,8 @@ table name: payment_audit_trail_changelog
 |          0 |
 +------------+
 
+
+**VERY IMPORTANT For Testing**
 **Process to delete data from bq & Spanner forcefully**
 Create a Temporary Table:
 
@@ -3401,3 +3403,65 @@ Dead Letter Queue (DLQ) Usage:
 Since the raw event format is incompatible, many messages are redirected to the DLQ.
 This indicates that the pipeline is failing to process messages due to schema mismatches or transformation issues.
 
+
+
+
+########
+
+
+% gcloud spanner databases execute-sql audit-db \    --instance=sample-instance \
+    --project=spanner-gke-443910 \
+    --sql="SELECT COUNT(*) AS total_rows FROM payment_audit_trail"
+total_rows
+0
+ai-learningharshvardhan@harshvadhansAir outputs % gcloud spanner databases execute-sql shared-db \
+    --instance=sample-instance \
+    --project=spanner-gke-443910 \
+    --sql="SELECT COUNT(*) AS total_rows FROM PaymentMilestoneEvents"
+total_rows
+0
+
+###
+
+Delete of the table content
+
+DELETE FROM PaymentMilestoneEvents WHERE true;
+
+
+% bq query --nouse_legacy_sql \
+"SELECT COUNT(*) AS total_rows FROM \`spanner-gke-443910.audit_service_dataset.payment_audit_trail_changelog\`"
++------------+
+| total_rows |
++------------+
+|       4598 |
++------------+
+ai-learningharshvardhan@harshvadhansAir outputs % bq query --nouse_legacy_sql \
+--destination_table="audit_service_dataset.temp_table" \
+"SELECT * FROM \`spanner-gke-443910.audit_service_dataset.payment_audit_trail_changelog\` WHERE FALSE"
+Waiting on bqjob_r704ef0cac33c4588_000001948c6b3f1f_1 ... (1s) Current status: DONE   
+ai-learningharshvardhan@harshvadhansAir outputs % bq rm -f spanner-gke-443910.audit_service_dataset.payment_audit_trail_changelog
+ai-learningharshvardhan@harshvadhansAir outputs % bq cp audit_service_dataset.temp_table audit_service_dataset.payment_audit_trail_changelog
+cp: Table spanner-gke-443910:audit_service_dataset.payment_audit_trail_changelog already exists. Replace the table? [y/N]: y
+Waiting on bqjob_r7954f8266cd533b0_000001948c6b91c8_1 ... (0s) Current status: DONE   
+Table 'spanner-gke-443910:audit_service_dataset.temp_table' successfully copied to 'spanner-gke-443910:audit_service_dataset.payment_audit_trail_changelog'
+ai-learningharshvardhan@harshvadhansAir outputs % bq rm -f spanner-gke-443910.audit_service_dataset.temp_table
+ai-learningharshvardhan@harshvadhansAir outputs %  bq query --nouse_legacy_sql \
+"SELECT COUNT(*) AS total_rows FROM \`spanner-gke-443910.audit_service_dataset.payment_audit_trail_changelog\`"
++------------+
+| total_rows |
++------------+
+|          0 |
++------------+
+ai-learningharshvardhan@harshvadhansAir outputs % gcloud spanner databases execute-sql shared-db \
+    --instance=sample-instance \
+    --project=spanner-gke-443910 \
+    --sql="SELECT COUNT(*) AS total_rows FROM PaymentMilestoneEvents"
+total_rows
+4598
+ai-learningharshvardhan@harshvadhansAir outputs % gcloud spanner databases execute-sql shared-db \
+    --instance=sample-instance \
+    --project=spanner-gke-443910 \
+    --sql="SELECT COUNT(*) AS total_rows FROM PaymentMilestoneEvents"
+total_rows
+0
+ai-learningharshvardhan@harshvadhansAir outputs % 
